@@ -126,7 +126,7 @@ services:
       HOUSE_OPS_ADMIN_PASSWORD: ${HOUSE_OPS_ADMIN_PASSWORD}
       HOUSE_OPS_SECOND_USERNAME: ${HOUSE_OPS_SECOND_USERNAME:-vitoria}
       HOUSE_OPS_SECOND_PASSWORD: ${HOUSE_OPS_SECOND_PASSWORD}
-    command: ["sh", "-ec", "home-lab init-db && home-lab transform && python manage.py migrate --noinput && python manage.py bootstrap_house_ops"]
+    command: ["sh", "-ec", "home-lab init-db && home-lab parse-documents && home-lab transform && python manage.py migrate --noinput && python manage.py bootstrap_house_ops"]
     volumes: *app-volumes
     depends_on:
       postgres:

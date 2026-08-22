@@ -57,6 +57,12 @@ if [[ "$snapshot" == true ]]; then
 fi
 
 .venv/bin/home-lab init-db
+if [[ "$snapshot" == true ]]; then
+    DOCUMENT_STORE_PATH="${HOME}/.local/share/home-lab/production/bronze/gmail" \
+        .venv/bin/home-lab parse-documents
+else
+    .venv/bin/home-lab parse-documents
+fi
 .venv/bin/home-lab transform
 .venv/bin/python manage.py migrate --noinput
 .venv/bin/python manage.py bootstrap_house_ops
