@@ -10,6 +10,13 @@ x-app-environment: &app-environment
   DOCUMENT_STORE_PATH: /data/bronze/gmail
   FINANCIAL_STATEMENT_STORE_PATH: /data/bronze/financial-statements
 
+x-web-environment: &web-environment
+  <<: *app-environment
+  DJANGO_SETTINGS_MODULE: house_ops.settings
+  HOUSE_OPS_SECRET_KEY: ${HOUSE_OPS_SECRET_KEY:?HOUSE_OPS_SECRET_KEY must be set}
+  HOUSE_OPS_DEBUG: "false"
+  HOUSE_OPS_ALLOWED_HOSTS: ${HOUSE_OPS_ALLOWED_HOSTS:-*}
+
 x-sync-environment: &sync-environment
   <<: *app-environment
   GMAIL_CLIENT_SECRET_PATH: /secrets/gmail_client_secret.json
@@ -58,17 +65,14 @@ services:
     shm_size: 256mb
     logging: *default-logging
 
-  dashboard:
+  web:
     image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
     environment:
-      <<: *app-environment
+      <<: *web-environment
       AFIP_SDK_ACCESS_TOKEN: ${AFIP_SDK_ACCESS_TOKEN:-}
-      HOME_LAB_OPERATIONS_PASSWORD: ${HOME_LAB_OPERATIONS_PASSWORD:-}
       HOME_LAB_SYNC_RUNNER_URL: http://sync-runner:8080
-      STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION: "true"
-      STREAMLIT_SERVER_ENABLE_CORS: "true"
     ports:
-      - "${HOME_LAB_PROD_BIND:-0.0.0.0}:${HOME_LAB_PROD_PORT:-8501}:8501"
+      - "${HOME_LAB_PROD_BIND:-0.0.0.0}:${HOME_LAB_PROD_PORT:-8501}:8000"
     volumes:
       - ${HOME_LAB_PROD_DATA_DIR:?HOME_LAB_PROD_DATA_DIR must be set}:/data:ro
     networks:
@@ -82,7 +86,7 @@ services:
         - CMD
         - python
         - -c
-        - "from urllib.request import urlopen; urlopen('http://localhost:8501/_stcore/health', timeout=3)"
+        - "from urllib.request import urlopen; urlopen('http://localhost:8000/health/', timeout=3)"
       interval: 10s
       timeout: 5s
       retries: 12
@@ -136,8 +140,12 @@ services:
     image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
     profiles: ["ops"]
     environment:
-      <<: *app-environment
-    command: ["sh", "-ec", "home-lab init-db && home-lab transform"]
+      <<: *web-environment
+      HOUSE_OPS_ADMIN_USERNAME: ${HOUSE_OPS_ADMIN_USERNAME:-emiliano}
+      HOUSE_OPS_ADMIN_PASSWORD: ${HOUSE_OPS_ADMIN_PASSWORD:?HOUSE_OPS_ADMIN_PASSWORD must be set}
+      HOUSE_OPS_SECOND_USERNAME: ${HOUSE_OPS_SECOND_USERNAME:-vitoria}
+      HOUSE_OPS_SECOND_PASSWORD: ${HOUSE_OPS_SECOND_PASSWORD:?HOUSE_OPS_SECOND_PASSWORD must be set}
+    command: ["sh", "-ec", "home-lab init-db && home-lab transform && python manage.py migrate --noinput && python manage.py bootstrap_house_ops"]
     networks:
       - backend
     depends_on:

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load house_ops %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div><h1 class="h2 mb-1">Tareas</h1><p class="text-body-secondary mb-0">Inbox → Doing → Done</p></div>
+  <a class="btn btn-primary touch-target" href="{% url 'work:task_create' %}">Nueva tarea</a>
+</div>
+<div class="kanban-grid">
+  {% for status, label, tasks in columns %}
+    <section class="kanban-column">
+      <h2 class="h5 d-flex justify-content-between"><span>{{ label }}</span><span class="badge text-bg-secondary">{{ tasks|length }}</span></h2>
+      <div class="vstack gap-2">
+        {% for task in tasks %}
+          <article class="card border-0 shadow-sm"><div class="card-body">
+            <div class="d-flex justify-content-between gap-2"><h3 class="h6 mb-1">{{ task.title }}</h3><span class="priority-dot priority-{{ task.priority }}" title="Prioridad {{ task.get_priority_display }}"></span></div>
+            {% if task.description %}<p class="small text-body-secondary mb-2">{{ task.description|truncatechars:120 }}</p>{% endif %}
+            <p class="small mb-3">{{ task.assigned_to|default:"Sin asignar" }}{% if task.due_date %} · {{ task.due_date|date_ar }}{% endif %}</p>
+            <div class="d-flex flex-wrap gap-2">
+              {% if status != 'inbox' %}<form method="post" action="{% url 'work:task_transition' task.id 'inbox' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary touch-target" type="submit">Inbox</button></form>{% endif %}
+              {% if status != 'doing' %}<form method="post" action="{% url 'work:task_transition' task.id 'doing' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-primary touch-target" type="submit">Doing</button></form>{% endif %}
+              {% if status != 'done' %}<form method="post" action="{% url 'work:task_transition' task.id 'done' %}">{% csrf_token %}<button class="btn btn-sm btn-success touch-target" type="submit">Done</button></form>{% endif %}
+              <a class="btn btn-sm btn-link touch-target" href="{% url 'work:task_update' task.id %}">Editar</a>
+            </div>
+          </div></article>
+        {% empty %}<div class="text-center text-body-secondary small py-4">No hay tareas.</div>{% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+</div>
+{% endblock %}

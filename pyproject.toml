@@ -5,27 +5,34 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "home-lab"
 version = "0.1.0"
-description = "Household finance and document automation"
+description = "House Ops household operations and finance"
 requires-python = ">=3.12"
 dependencies = [
   "dbt-postgres>=1.9,<2",
+  "Django>=5.2.12,<5.3",
   "google-api-python-client>=2.160,<3",
   "google-auth-oauthlib>=1.2,<2",
+  "gunicorn>=23,<24",
   "pandas>=2.2,<3",
   "psycopg[binary]>=3.2,<4",
   "pypdf>=5.1,<7",
   "python-dotenv>=1.0,<2",
   "SQLAlchemy>=2.0,<3",
-  "streamlit>=1.60,<2",
-  "streamlit-pdf>=1.0.8,<2",
+  "whitenoise>=6.12,<7",
 ]
 
 [project.scripts]
 home-lab = "home_lab.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9"]
+dev = [
+  "playwright>=1.55,<2",
+  "pytest>=8,<9",
+  "pytest-django>=4.11,<5",
+]
 
 [tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "house_ops.settings"
+markers = ["e2e: browser smoke tests against a running House Ops stack"]
 pythonpath = ["src"]
 testpaths = ["tests"]

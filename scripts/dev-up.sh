@@ -58,10 +58,12 @@ fi
 
 .venv/bin/home-lab init-db
 .venv/bin/home-lab transform
+.venv/bin/python manage.py migrate --noinput
+.venv/bin/python manage.py bootstrap_house_ops
 
 if [[ "$full" == true ]]; then
-    compose up -d --build --wait --wait-timeout 180 dashboard sync-runner
-    echo "Development is ready at $(compose port dashboard 8501)"
+    compose up -d --build --wait --wait-timeout 180 web sync-runner
+    echo "House Ops development is ready at $(compose port web 8000)"
 else
-    echo "PostgreSQL and analytics are ready. Add --full for the dashboard."
+    echo "PostgreSQL, Django and analytics are ready. Add --full for House Ops web."
 fi

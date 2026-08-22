@@ -1,8 +1,21 @@
 # Modelo de datos
 
-`House Ledger` usa una arquitectura Bronze/Silver/Gold. Bronze conserva las fuentes
+House Ops usa una arquitectura Bronze/Silver/Gold para Ledger. Bronze conserva las fuentes
 reproducibles, Silver normaliza sus entidades y Gold presenta modelos listos para
 consulta.
+
+Los modelos domésticos operacionales viven aparte en el schema `public` y usan
+migraciones Django:
+
+- `work_task`: tarea puntual, estado simple, prioridad, vencimiento, asignación,
+  creador y usuario que la completa;
+- `work_routine`: regla recurrente y única próxima fecha;
+- `work_routinecompletion`: historial por ocurrencia programada y usuario;
+- `house_ops_operation_runs`: auditoría de operaciones solicitadas desde la web;
+- tablas nativas de Django para usuarios, sesiones y permisos básicos.
+
+No hay FK artificial entre estos modelos y las vistas Gold. Ledger consulta
+Gold/Silver por SQL y no duplica cálculos ni ownership del warehouse.
 
 ## Tablas y vistas principales
 

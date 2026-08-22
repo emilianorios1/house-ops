@@ -28,14 +28,16 @@ free_port() {
 
 if [[ ! -f "$env_file" ]]; then
     postgres_port="$(free_port)"
-    dashboard_port="$(free_port)"
-    while [[ "$dashboard_port" == "$postgres_port" ]]; do
-        dashboard_port="$(free_port)"
+    web_port="$(free_port)"
+    while [[ "$web_port" == "$postgres_port" ]]; do
+        web_port="$(free_port)"
     done
     db_name="home_lab_${slug//-/_}"
     db_user="$db_name"
     db_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-    operations_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    django_secret="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+    admin_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    second_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
 
     umask 077
     {
@@ -43,13 +45,19 @@ if [[ ! -f "$env_file" ]]; then
         echo "HOME_LAB_DEV_IMAGE=home-lab-wt-${slug}:dev"
         echo "HOME_LAB_DEV_POSTGRES_VOLUME=home-lab-wt-${slug}-postgres-data"
         echo "HOME_LAB_DEV_POSTGRES_PORT=${postgres_port}"
-        echo "HOME_LAB_DEV_DASHBOARD_PORT=${dashboard_port}"
+        echo "HOUSE_OPS_DEV_WEB_PORT=${web_port}"
         echo "DBT_POSTGRES_HOST=127.0.0.1"
         echo "DBT_POSTGRES_PORT=${postgres_port}"
         echo "POSTGRES_DB=${db_name}"
         echo "POSTGRES_USER=${db_user}"
         echo "POSTGRES_PASSWORD=${db_password}"
-        echo "HOME_LAB_OPERATIONS_PASSWORD=${operations_password}"
+        echo "HOUSE_OPS_SECRET_KEY=${django_secret}"
+        echo "HOUSE_OPS_DEBUG=true"
+        echo "HOUSE_OPS_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"
+        echo "HOUSE_OPS_ADMIN_USERNAME=emiliano"
+        echo "HOUSE_OPS_ADMIN_PASSWORD=${admin_password}"
+        echo "HOUSE_OPS_SECOND_USERNAME=vitoria"
+        echo "HOUSE_OPS_SECOND_PASSWORD=${second_password}"
         echo "DATABASE_URL=postgresql+psycopg://${db_user}:${db_password}@127.0.0.1:${postgres_port}/${db_name}"
         echo "DOCUMENT_STORE_PATH=data/bronze/gmail"
         echo "FINANCIAL_STATEMENT_STORE_PATH=data/bronze/financial-statements"
@@ -72,9 +80,17 @@ fi
 if ! grep -q '^DBT_POSTGRES_PORT=' "$env_file"; then
     echo "DBT_POSTGRES_PORT=${postgres_port}" >> "$env_file"
 fi
-if ! grep -q '^HOME_LAB_OPERATIONS_PASSWORD=' "$env_file"; then
-    operations_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-    echo "HOME_LAB_OPERATIONS_PASSWORD=${operations_password}" >> "$env_file"
+if ! grep -q '^HOUSE_OPS_SECRET_KEY=' "$env_file"; then
+    echo "HOUSE_OPS_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> "$env_file"
+    echo "HOUSE_OPS_DEBUG=true" >> "$env_file"
+    echo "HOUSE_OPS_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]" >> "$env_file"
+    echo "HOUSE_OPS_ADMIN_USERNAME=emiliano" >> "$env_file"
+    echo "HOUSE_OPS_ADMIN_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> "$env_file"
+    echo "HOUSE_OPS_SECOND_USERNAME=vitoria" >> "$env_file"
+    echo "HOUSE_OPS_SECOND_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> "$env_file"
+fi
+if ! grep -q '^HOUSE_OPS_DEV_WEB_PORT=' "$env_file"; then
+    echo "HOUSE_OPS_DEV_WEB_PORT=$(free_port)" >> "$env_file"
 fi
 
 # Create nested bind-mount targets as the worktree user before Docker can

@@ -33,12 +33,24 @@ if ! flock -n 9; then
     echo "Another production deployment is already running" >&2
     exit 1
 fi
-if ! grep -q '^HOME_LAB_OPERATIONS_PASSWORD=' "$prod_env"; then
-    operations_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-    umask 077
-    printf '\nHOME_LAB_OPERATIONS_PASSWORD=%s\n' "$operations_password" >> "$prod_env"
-    echo "Generated HOME_LAB_OPERATIONS_PASSWORD in $prod_env"
-fi
+ensure_env_value() {
+    local key="$1"
+    local value="$2"
+    if ! grep -q "^${key}=" "$prod_env"; then
+        umask 077
+        printf '\n%s=%s\n' "$key" "$value" >> "$prod_env"
+    fi
+}
+
+ensure_env_value HOUSE_OPS_SECRET_KEY \
+    "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+ensure_env_value HOUSE_OPS_ALLOWED_HOSTS '*'
+ensure_env_value HOUSE_OPS_ADMIN_USERNAME emiliano
+ensure_env_value HOUSE_OPS_ADMIN_PASSWORD \
+    "$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+ensure_env_value HOUSE_OPS_SECOND_USERNAME vitoria
+ensure_env_value HOUSE_OPS_SECOND_PASSWORD \
+    "$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
 
 had_previous=false
 if [[ -f "$deployment_env" ]]; then
@@ -71,7 +83,7 @@ rollback() {
         cp "$previous_env" "$deployment_env"
         cp "$previous_compose" "${config_dir}/compose.production.yaml"
         "$compose_command" up -d --wait --wait-timeout 120 \
-            --remove-orphans postgres dashboard || true
+            --remove-orphans || true
     fi
     exit "$status"
 }
@@ -80,13 +92,13 @@ trap rollback ERR
 "$compose_command" config --quiet
 
 if [[ "${HOME_LAB_SKIP_PULL:-0}" != "1" ]]; then
-    "$compose_command" pull postgres dashboard sync-runner migrate
+    "$compose_command" pull postgres web sync-runner migrate
 fi
 
 "$compose_command" up -d --wait --wait-timeout 120 postgres
 "$compose_command" run --rm migrate
 "$compose_command" up -d --wait --wait-timeout 180 --remove-orphans \
-    dashboard sync-runner
+    web sync-runner
 
 env_value() {
     local key="$1"
@@ -97,10 +109,10 @@ env_value() {
 }
 production_bind="$(env_value HOME_LAB_PROD_BIND)"
 production_port="$(env_value HOME_LAB_PROD_PORT)"
-dashboard_container="$("$compose_command" ps -q dashboard)"
-running_image="$(docker inspect --format '{{.Config.Image}}' "$dashboard_container")"
+web_container="$("$compose_command" ps -q web)"
+running_image="$(docker inspect --format '{{.Config.Image}}' "$web_container")"
 if [[ "$running_image" != "$image" ]]; then
-    echo "Dashboard is using $running_image instead of $image" >&2
+    echo "House Ops web is using $running_image instead of $image" >&2
     exit 1
 fi
 runner_container="$("$compose_command" ps -q sync-runner)"
@@ -115,7 +127,7 @@ if [[ "$health_host" == "0.0.0.0" || "$health_host" == "::" ]]; then
     health_host="127.0.0.1"
 fi
 curl --fail --silent --show-error \
-    "http://${health_host}:${production_port:-8501}/_stcore/health" >/dev/null
+    "http://${health_host}:${production_port:-8501}/health/" >/dev/null
 
 trap - ERR
 rm -f "$previous_env" "$previous_compose"
@@ -141,4 +153,4 @@ if [[ -e "${systemd_user_dir}/home-lab-production.service" ]]; then
     systemctl --user enable --now home-lab-backup-verify.timer
 fi
 
-echo "Production deployed with image $image at ${production_bind:-0.0.0.0}:${production_port:-8501}"
+echo "House Ops deployed with image $image at ${production_bind:-0.0.0.0}:${production_port:-8501}"

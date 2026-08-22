@@ -48,5 +48,5 @@ def test_sets_afip_sdk_access_token_without_printing_it(
         "up",
         "-d",
         "--force-recreate",
-        "dashboard",
+        "web",
     ]

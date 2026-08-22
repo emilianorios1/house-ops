@@ -77,8 +77,8 @@ no como otro lote API:
 ```
 
 También se puede cargar desde **Operaciones > Importar extracto de Mercado
-Pago** en el dashboard. La pantalla ejecuta ambos pasos y requiere la clave de
-operaciones.
+Pago** en House Ops. La pantalla encola ambos pasos en el runner privado y
+atribuye la operación al usuario autenticado; el navegador no recibe credenciales.
 
 El CSV original se conserva por contenido en
 `data/bronze/financial-statements/mercadopago/<año>/<mes>/`. Su metadata, período,

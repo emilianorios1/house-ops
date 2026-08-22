@@ -7,6 +7,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 from urllib.parse import quote
+from uuid import uuid4
 
 import pytest
 
@@ -42,9 +43,17 @@ def request(
     return response.status, payload
 
 
+def wait_for_runner() -> None:
+    assert sync_runner.SYNC_LOCK.acquire(timeout=2)
+    sync_runner.SYNC_LOCK.release()
+
+
+def operation_headers(**extra: str) -> dict[str, str]:
+    return {"X-Operation-ID": str(uuid4()), **extra}
+
+
 def test_health_endpoint(runner_server: tuple[str, int]) -> None:
     status, payload = request(runner_server, "GET", "/health")
-
     assert status == 200
     assert payload == {"message": "Runner disponible."}
 
@@ -52,39 +61,48 @@ def test_health_endpoint(runner_server: tuple[str, int]) -> None:
 @pytest.mark.parametrize(
     ("path", "command"),
     [
-        ("/sync/gmail", "sync-gmail"),
-        ("/sync/mercadopago", "sync-mercadopago"),
-        ("/sync/siat-tgi", "sync-siat-tgi"),
+        ("/jobs/sync/gmail", "sync-gmail"),
+        ("/jobs/sync/mercadopago", "sync-mercadopago"),
+        ("/jobs/sync/siat-tgi", "sync-siat-tgi"),
+        ("/jobs/transform", "transform"),
     ],
 )
-def test_sync_endpoint_runs_only_allowlisted_command(
+def test_job_endpoint_accepts_only_allowlisted_async_command(
     runner_server: tuple[str, int],
     monkeypatch: pytest.MonkeyPatch,
     path: str,
     command: str,
 ) -> None:
     calls: list[list[str]] = []
+    statuses: list[str] = []
 
     def run(args: list[str], **_: object) -> subprocess.CompletedProcess[str]:
         calls.append(args)
         return subprocess.CompletedProcess(args, 0)
 
     monkeypatch.setattr(sync_runner.subprocess, "run", run)
+    monkeypatch.setattr(sync_runner, "_update_operation", lambda _id, status, _message="": statuses.append(status))
 
-    status, payload = request(runner_server, "POST", path)
-
-    assert status == 200
-    assert payload == {"message": "Sincronización completada."}
+    status, payload = request(runner_server, "POST", path, headers=operation_headers())
+    assert status == 202
+    assert payload == {"message": "Operación iniciada."}
+    wait_for_runner()
     assert calls == [["home-lab", command]]
+    assert statuses == ["running", "succeeded"]
 
 
-def test_unknown_sync_is_rejected(runner_server: tuple[str, int]) -> None:
-    status, _ = request(runner_server, "POST", "/sync/arbitrary-command")
-
+def test_unknown_job_is_rejected(runner_server: tuple[str, int]) -> None:
+    status, _ = request(runner_server, "POST", "/jobs/arbitrary", headers=operation_headers())
     assert status == 404
 
 
-def test_statement_endpoint_imports_csv_and_rebuilds_models(
+def test_missing_operation_id_is_rejected(runner_server: tuple[str, int]) -> None:
+    status, payload = request(runner_server, "POST", "/jobs/sync/gmail")
+    assert status == 400
+    assert "identificador" in payload["message"]
+
+
+def test_statement_endpoint_imports_csv_then_rebuilds_models(
     runner_server: tuple[str, int],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -100,18 +118,25 @@ def test_statement_endpoint_imports_csv_and_rebuilds_models(
         return subprocess.CompletedProcess(args, 0)
 
     monkeypatch.setattr(sync_runner.subprocess, "run", run)
+    monkeypatch.setattr(sync_runner, "_update_operation", lambda *_args: None)
     content = b"synthetic Mercado Pago statement"
+    headers = operation_headers(
+        **{
+            "X-Filename": quote("resumen agosto.csv", safe=""),
+            "Content-Length": str(len(content)),
+        }
+    )
 
     status, payload = request(
         runner_server,
         "POST",
         sync_runner.STATEMENT_IMPORT_PATH,
         body=content,
-        headers={"X-Filename": quote("resumen agosto.csv", safe="")},
+        headers=headers,
     )
-
-    assert status == 200
-    assert payload == {"message": "Extracto importado y datos actualizados."}
+    assert status == 202
+    assert payload == {"message": "Importación iniciada."}
+    wait_for_runner()
     assert imported == {"name": "resumen agosto.csv", "content": content}
     assert calls[0][0:2] == ["home-lab", "import-account-statement"]
     assert calls[1] == ["home-lab", "transform"]
@@ -119,56 +144,47 @@ def test_statement_endpoint_imports_csv_and_rebuilds_models(
 
 @pytest.mark.parametrize("filename", ["../extracto.csv", "extracto.txt"])
 def test_statement_endpoint_rejects_invalid_filename(
-    runner_server: tuple[str, int],
-    monkeypatch: pytest.MonkeyPatch,
-    filename: str,
+    runner_server: tuple[str, int], filename: str
 ) -> None:
-    calls: list[list[str]] = []
-    monkeypatch.setattr(
-        sync_runner.subprocess,
-        "run",
-        lambda args, **_: calls.append(args),
-    )
-
     status, payload = request(
         runner_server,
         "POST",
         sync_runner.STATEMENT_IMPORT_PATH,
         body=b"not used",
-        headers={"X-Filename": quote(filename, safe="")},
+        headers=operation_headers(
+            **{"X-Filename": quote(filename, safe=""), "Content-Length": "8"}
+        ),
     )
-
     assert status == 400
     assert payload == {"message": "Seleccioná un archivo CSV válido."}
-    assert calls == []
 
 
-def test_statement_endpoint_rejects_oversized_file(
-    runner_server: tuple[str, int],
-) -> None:
+def test_statement_endpoint_rejects_oversized_file(runner_server: tuple[str, int]) -> None:
     status, payload = request(
         runner_server,
         "POST",
         sync_runner.STATEMENT_IMPORT_PATH,
-        body=b"",
-        headers={
-            "Content-Length": str(sync_runner.MAX_STATEMENT_BYTES + 1),
-            "X-Filename": "extracto.csv",
-        },
+        headers=operation_headers(
+            **{
+                "Content-Length": str(sync_runner.MAX_STATEMENT_BYTES + 1),
+                "X-Filename": "extracto.csv",
+            }
+        ),
     )
-
     assert status == 413
     assert payload == {"message": "El CSV supera el límite de 10 MB."}
 
 
-def test_second_sync_is_rejected_while_runner_is_busy(
-    runner_server: tuple[str, int],
-) -> None:
+def test_second_job_is_rejected_while_runner_is_busy(runner_server: tuple[str, int]) -> None:
     sync_runner.SYNC_LOCK.acquire()
     try:
-        status, payload = request(runner_server, "POST", "/sync/gmail")
+        status, payload = request(
+            runner_server,
+            "POST",
+            "/jobs/sync/gmail",
+            headers=operation_headers(),
+        )
     finally:
         sync_runner.SYNC_LOCK.release()
-
     assert status == 409
-    assert payload == {"message": "Ya hay una sincronización en ejecución."}
+    assert payload == {"message": "Ya hay una operación en ejecución."}

@@ -46,5 +46,5 @@ chmod 600 "$temporary_env"
 mv "$temporary_env" "$prod_env"
 trap - EXIT
 
-echo "Token actualizado. Recreando el dashboard…"
-"$compose_command" up -d --force-recreate dashboard
+echo "Token actualizado. Recreando House Ops…"
+"$compose_command" up -d --force-recreate web

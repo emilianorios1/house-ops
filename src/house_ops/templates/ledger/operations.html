@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div>
+  <h1 class="h2 mb-1">Operaciones</h1>
+  <p class="text-body-secondary">Las credenciales permanecen en el runner interno. Podés salir de la página mientras trabaja.</p>
+</div>
+<div class="row g-2 mb-4">
+  <div class="col-12 col-md-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body">
+    <h2 class="h5">Gmail</h2><p class="small text-body-secondary">Importa correo, documentos y reconstruye datos.</p>
+    <form method="post" action="{% url 'ledger:operation_start' 'gmail' %}">{% csrf_token %}<button class="btn btn-primary w-100 touch-target">Sincronizar</button></form>
+  </div></div></div>
+  <div class="col-12 col-md-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body">
+    <h2 class="h5">Mercado Pago</h2><p class="small text-body-secondary">Importa los movimientos del día anterior.</p>
+    <form method="post" action="{% url 'ledger:operation_start' 'mercadopago' %}">{% csrf_token %}<button class="btn btn-primary w-100 touch-target">Sincronizar</button></form>
+  </div></div></div>
+  <div class="col-12 col-md-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body">
+    <h2 class="h5">TGI</h2><p class="small text-body-secondary">Descarga nuevas boletas desde SIAT.</p>
+    <form method="post" action="{% url 'ledger:operation_start' 'siat-tgi' %}">{% csrf_token %}<button class="btn btn-primary w-100 touch-target">Sincronizar</button></form>
+  </div></div></div>
+  <div class="col-12 col-md-6 col-xl-3"><div class="card border-0 shadow-sm h-100"><div class="card-body">
+    <h2 class="h5">Silver / Gold</h2><p class="small text-body-secondary">Ejecuta dbt build sin importar fuentes.</p>
+    <form method="post" action="{% url 'ledger:operation_start' 'transform' %}">{% csrf_token %}<button class="btn btn-outline-primary w-100 touch-target">Reconstruir</button></form>
+  </div></div></div>
+</div>
+<div class="row g-3">
+  <div class="col-12 col-lg-5"><div class="card border-0 shadow-sm"><div class="card-body">
+    <h2 class="h5">Importar extracto de Mercado Pago</h2>
+    <form method="post" enctype="multipart/form-data" action="{% url 'ledger:statement_import' %}" class="vstack gap-2">
+      {% csrf_token %}{{ upload_form.statement.label_tag }}{{ upload_form.statement }}
+      <button class="btn btn-primary touch-target">Importar</button>
+    </form>
+  </div></div></div>
+  <div class="col-12 col-lg-7">
+    <h2 class="h5">Actividad reciente</h2>
+    <div class="vstack gap-2">{% for run in runs %}{% include "ledger/_operation_status.html" %}{% empty %}<div class="alert alert-light border">Todavía no hay operaciones.</div>{% endfor %}</div>
+  </div>
+</div>
+{% endblock %}
