@@ -2,10 +2,10 @@
 
 ## Purpose and sources of truth
 
-`House Ledger` is a local platform for importing personal financial activity and
-household documents, normalizing them in PostgreSQL with dbt, and presenting
-read-only views in Streamlit. It uses Python 3.12, PostgreSQL 17, dbt, and a
-Bronze/Silver/Gold architecture.
+`House Ops` is a local Django application for household work, recurring routines,
+personal financial activity, and documents. It normalizes financial sources in
+PostgreSQL with dbt and serves a responsive server-rendered UI. It uses Python
+3.12, Django 5.2, PostgreSQL 17, dbt, and a Bronze/Silver/Gold architecture.
 
 - Use `README.md` for the detailed domain model, setup, and operator workflows.
 - Treat the implementation and tests as the source of truth when documentation
@@ -13,7 +13,7 @@ Bronze/Silver/Gold architecture.
 - Keep this file focused on durable repository guidance. Task-specific goals and
   temporary decisions belong in the task prompt, not in `AGENTS.md`.
 - Preserve the existing language of the surface being changed: code identifiers
-  are English, while user-facing documentation and dashboard copy are generally
+  are English, while user-facing documentation and House Ops copy are generally
   Spanish.
 
 ## Architecture invariants
@@ -31,7 +31,7 @@ Bronze/Silver/Gold architecture.
   document contents in database tables.
 - Imports and synchronization flows must remain idempotent. Preserve the current
   deduplication keys and source lineage when extending them.
-- Streamlit reporting pages are read-only. Keep writes limited to explicit
+- Ledger reporting pages are read-only. Keep financial writes limited to explicit
   data-entry or maintenance interfaces and persist them in Bronze.
 - Keep the legacy `raw` compatibility path working unless a task explicitly
   includes a migration and removal plan.
@@ -49,8 +49,11 @@ Bronze/Silver/Gold architecture.
 - `src/home_lab/siat/`: Rosario TGI client and pipeline.
 - `src/home_lab/documents/`: PDF validation, content-addressed storage, parser
   registry, and source-specific parsers.
-- `src/home_lab/dashboard/`: reporting queries and Streamlit pages, including
-  explicit manual data-entry interfaces.
+- `src/house_ops/work/`: Home, tasks, routines, completion history, and auth-aware
+  operational workflows.
+- `src/house_ops/ledger/`: Django Ledger/documents/operations views plus SQL
+  repositories over Gold/Silver and the operation audit model.
+- `src/house_ops/templates/` and `static/`: Bootstrap/HTMX server-rendered UI.
 - `dbt/models/silver/`: normalization models.
 - `dbt/models/gold/`: reporting and reconciliation models.
 - `dbt/tests/` and model `schema.yml` files: dbt data-quality assertions.
@@ -74,7 +77,7 @@ Bronze/Silver/Gold architecture.
   creation or migration. Do not drop or rewrite user data as a side effect of
   normal startup.
 - When changing dbt models, preserve Bronze lineage, add or update schema/data
-  tests, and check downstream Gold queries and dashboard expectations.
+  tests, and check downstream Gold queries and House Ops expectations.
 - When changing behavior or operator commands, update `README.md` in the same
   change.
 - Add production dependencies only when the standard library and existing
@@ -97,7 +100,7 @@ Useful commands:
 ```bash
 .venv/bin/python -m pytest
 .venv/bin/home-lab transform
-docker compose up -d --build dashboard
+docker compose up -d --build web sync-runner
 docker compose config
 ```
 
@@ -109,11 +112,12 @@ profiles. It requires the configured local PostgreSQL instance.
 - Run the most focused relevant pytest tests while iterating, then the full
   `.venv/bin/python -m pytest` suite for Python behavior changes.
 - Run `.venv/bin/home-lab transform` for database, dbt, reconciliation, or
-  dashboard-query changes.
+  Ledger-query changes.
 - Run `docker compose config` for Compose changes.
 - Run `bash -n` on every changed shell script.
-- For dashboard changes, at minimum run the dashboard query tests and any
-  relevant dbt build; exercise the page locally when the visual behavior matters.
+- For House Ops changes, run the Django integration tests and any relevant dbt
+  build; exercise the page locally and run the Playwright smoke when visual or
+  interaction behavior matters.
 - Documentation-only changes do not require runtime tests. Review rendered
   structure, verify commands against the repository, and run `git diff --check`.
 - If a validation cannot run because services or credentials are unavailable,
@@ -158,8 +162,8 @@ profiles. It requires the configured local PostgreSQL instance.
      settings.
   5. Perform every file modification and all task-specific validation from that
      worktree. Do not modify the primary checkout.
-- `scripts/dev-up.sh` starts isolated PostgreSQL and dbt by default; add `--full`
-  only for dashboard work. Use `--snapshot` only when representative production
+- `scripts/dev-up.sh` starts isolated PostgreSQL, dbt and Django migrations by
+  default; add `--full` for browser work. Use `--snapshot` only when representative production
   data is required. Treat that database as sensitive production-derived data:
   never print, export, commit, or copy its contents into fixtures or logs.
 - Choose a unique slug if the intended branch or directory already exists.

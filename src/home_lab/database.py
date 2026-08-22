@@ -8,7 +8,7 @@ from home_lab.config import database_url
 
 
 def get_engine() -> Engine:
-    return create_engine(database_url())
+    return create_engine(database_url(), pool_pre_ping=True)
 
 
 def create_schema(engine: Engine) -> None:

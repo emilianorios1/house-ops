@@ -1,0 +1,1 @@
+"""House Ops Django application."""

@@ -19,6 +19,9 @@ chmod 700 "$config_dir" "$secrets_dir"
 if [[ ! -f "$prod_env" ]]; then
     umask 077
     password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+    django_secret="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+    admin_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    second_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
     cat > "$prod_env" <<EOF
 POSTGRES_DB=home_lab_prod
 POSTGRES_USER=home_lab_prod
@@ -31,6 +34,12 @@ HOME_LAB_BACKUP_DIR=${backup_dir}
 HOME_LAB_BACKUP_RETENTION_DAYS=14
 HOME_LAB_HOST_UID=$(id -u)
 HOME_LAB_HOST_GID=$(id -g)
+HOUSE_OPS_SECRET_KEY=${django_secret}
+HOUSE_OPS_ALLOWED_HOSTS=*
+HOUSE_OPS_ADMIN_USERNAME=emiliano
+HOUSE_OPS_ADMIN_PASSWORD=${admin_password}
+HOUSE_OPS_SECOND_USERNAME=vitoria
+HOUSE_OPS_SECOND_PASSWORD=${second_password}
 GMAIL_QUERY={from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar from:facturadigital@aguassantafesinas.com from:factura@digital.litoralgas.com.ar from:avisos@info.naranjax.com from:noreply@iplan.com.ar} newer_than:45d
 DOCUMENT_MAX_BYTES=20971520
 SIAT_TGI_ACCOUNT=
@@ -44,7 +53,7 @@ else
 fi
 chmod 600 "$prod_env"
 
-docker build --file "${repo_root}/Dockerfile.dashboard" --tag "$image" "$repo_root"
+docker build --file "${repo_root}/Dockerfile" --tag "$image" "$repo_root"
 HOME_LAB_SKIP_PULL=1 "${repo_root}/scripts/deploy-production.sh" "$image"
 
 install -m 0644 "${repo_root}/infra/systemd/home-lab-production.service" \

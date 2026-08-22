@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load house_ops %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3"><div><h1 class="h2 mb-1">Rutinas</h1><p class="text-body-secondary mb-0">Obligaciones recurrentes sin crear tareas futuras.</p></div><a class="btn btn-primary touch-target" href="{% url 'work:routine_create' %}">Nueva rutina</a></div>
+<div class="row g-3">
+  {% for routine in routines %}
+    <div class="col-12 col-lg-6"><article class="card border-0 shadow-sm h-100"><div class="card-body">
+      <div class="d-flex justify-content-between gap-2"><div><span class="badge {% if routine.active %}text-bg-success{% else %}text-bg-secondary{% endif %}">{% if routine.active %}Activa{% else %}Inactiva{% endif %}</span><h2 class="h5 mt-2">{{ routine.title }}</h2></div><a href="{% url 'work:routine_update' routine.id %}" class="btn btn-sm btn-link">Editar</a></div>
+      <p class="text-body-secondary">Cada {{ routine.interval }} {{ routine.get_recurrence_display|lower }} · próxima {{ routine.next_due_date|date_ar }}</p>
+      {% if routine.active and routine.next_due_date <= today %}<form method="post" action="{% url 'work:routine_complete' routine.id %}">{% csrf_token %}<button class="btn btn-success touch-target" type="submit">Hecho</button></form>{% endif %}
+      {% with completions=routine.completions.all %}{% if completions %}<hr><details><summary class="small fw-semibold">Historial</summary><ul class="small mt-2 mb-0">{% for item in completions|slice:':5' %}<li>{{ item.completed_at|date:"d/m/Y H:i" }} · {{ item.completed_by|default:"Usuario eliminado" }}</li>{% endfor %}</ul></details>{% endif %}{% endwith %}
+    </div></article></div>
+  {% empty %}<div class="col-12"><div class="alert alert-light border">No hay rutinas.</div></div>{% endfor %}
+</div>
+{% endblock %}

@@ -1,93 +1,76 @@
 # Arquitectura
 
-`House Ledger` integra actividad financiera y documentos del hogar en PostgreSQL,
-los transforma con dbt y los presenta en Streamlit. Las páginas de reporte son de
-sólo lectura; la carga manual y las sincronizaciones viven en interfaces
-explícitas de mantenimiento.
+House Ops es un monolito Django desplegado junto con PostgreSQL y un runner
+interno. La capa de aplicación fue reemplazada de una vez; el warehouse y las
+integraciones conservan sus invariantes.
 
 ```text
-Mercado Pago Reports API ───────┐
-                               ▼
-Gmail API ──► PDF/metadata ──► Bronze ──► parser PDF ──► Silver ──► Gold
-SIAT TGI ───► boleta PDF ────────┘
-                                                          │          │
-                                                          └────┬─────┘
-                                                               ▼
-                         Streamlit (consultas + mantenimiento explícito)
-                                         │
-                                         ▼
-                              sync runner HTTP interno
+Fuentes externas ──▶ pipelines home_lab ──▶ Bronze
+                                               │
+                                               ▼
+                                      Silver / Gold (dbt)
+                                               │ SQL de lectura
+                                               ▼
+Navegador ──▶ Django / Bootstrap / HTMX ──▶ PostgreSQL public
+                    │                           Tasks / Routines / Auth
+                    │ POST privado
+                    ▼
+              sync-runner ──▶ CLI allow-listed ──▶ fuentes / Bronze / dbt
 ```
 
-## Capas de datos
+## Límites
 
-- **Bronze** conserva fuentes reproducibles: movimientos originales, mensajes,
-  adjuntos, texto extraído y resultados versionados del parser.
-- **Silver** normaliza movimientos, documentos, obligaciones, Facturas E
-  emitidas, vencimientos, conceptos y consumos de tarjetas.
-- **Gold** disponibiliza movimientos, obligaciones, documentos, gastos y
-  candidatos de conciliación listos para consultar.
+- `src/home_lab/` conserva clientes HTTP, persistencia Bronze, parsers,
+  almacenamiento, CLI y transformaciones. Sus pipelines siguen siendo
+  idempotentes.
+- `src/house_ops/work/` contiene trabajo doméstico: Home, Task, Routine y
+  RoutineCompletion.
+- `src/house_ops/ledger/` contiene las pantallas financieras/documentales, las
+  consultas SQL y el registro de operaciones.
+- `src/house_ops/templates/` y `static/` forman la UI server-rendered.
+- `dbt/` sigue siendo la única definición de Silver/Gold y de sus controles de
+  calidad.
 
-Una factura recibida es una obligación y no un movimiento realizado. Una
-Factura E emitida es una venta y tampoco demuestra por sí sola que haya sido
-cobrada. Gold conserva separadas esas entidades y los movimientos de efectivo.
+No hay una app Django por proveedor ni modelos ORM artificiales para cada vista
+Gold. Los modelos operacionales usan migraciones normales en `public`; los
+reportes consultan el warehouse directamente con SQLAlchemy y límites explícitos.
 
-## Documentos y trazabilidad
+## Invariantes de datos
 
-Los PDF viven fuera de PostgreSQL en almacenamiento content-addressed. La base
-sólo guarda su ruta relativa, SHA-256, tamaño, tipo y trazabilidad.
+1. Bronze conserva fuente, hash, batch y metadata reproducible.
+2. Un documento binario vive fuera de PostgreSQL. La base conserva path, hash,
+   tamaño, parser y lineage.
+3. Una factura crea una obligación. Sólo una conciliación explícita con un
+   movimiento crea evidencia de pago.
+4. La carga de extractos y las sincronizaciones preservan las claves de
+   idempotencia existentes.
+5. Las migraciones Django son forward-only y crean tablas nuevas en `public`;
+   no eliminan schemas Bronze/Silver/Gold ni el camino `raw` de compatibilidad.
 
-Un correo se deduplica por `message_id`, un adjunto por
-`message_id + attachment_id` y un documento por su hash. Cada resultado de
-parsing conserva el nombre y la versión del parser para poder corregirlo y
-reprocesarlo sin volver a consultar la fuente.
+## Recurrencia
 
-Las descargas externas se restringen a endpoints de confianza, deben tener firma
-PDF y respetan el límite de tamaño configurado.
+Routine guarda una única fecha próxima, no tareas futuras. Al completar una
+rutina vencida, una transacción bloquea la fila, crea exactamente un
+RoutineCompletion para la ocurrencia, atribuye el usuario, actualiza
+`last_completed` y calcula la próxima fecha.
 
-## Estructura Python
+La suma mensual conserva el día cuando existe y lo ajusta al último día válido
+del mes. Por ejemplo, 31/01 pasa a 28/02 o 29/02. Días, semanas, meses y años usan
+la misma función determinística cubierta por tests.
 
-Todo el código pertenece al namespace `home_lab`. Las integraciones están
-agrupadas por fuente y mantienen separados el acceso HTTP, la persistencia, el
-parsing y la orquestación:
+## Operaciones largas
 
-```text
-src/home_lab/
-├── cli.py
-├── config.py
-├── database.py
-├── sync_runner.py
-├── gmail/
-│   ├── client.py
-│   ├── repository.py
-│   └── pipeline.py
-├── mercadopago/
-│   ├── client.py
-│   ├── importer.py
-│   └── pipeline.py
-├── siat/
-├── documents/
-│   ├── pdf.py
-│   ├── storage.py
-│   └── parsers/
-└── dashboard/
-```
+Las requests web no esperan sincronizaciones o dbt. Django crea un OperationRun y
+envía su UUID al runner por la red Docker privada. El runner responde rápido,
+ejecuta en un thread con un lock global y actualiza el mismo registro. Un hogar de
+dos personas no justifica otra cola, broker o worker distribuido.
 
-Mercado Pago separa el cliente HTTP, la transformación/carga y la orquestación.
-Gmail aplica la misma separación para llamadas externas, persistencia Bronze y
-pipeline. Las nuevas fuentes siguen esa estructura en lugar de concentrarse en
-paquetes genéricos.
+La web no monta `secrets/` ni recibe credenciales de Gmail, Mercado Pago o SIAT.
+El runner no recibe el secret ni las contraseñas Django.
 
-Las consultas del dashboard permanecen separadas de las interfaces explícitas de
-mantenimiento. La carga manual persiste sus datos en Bronze para conservar
-trazabilidad.
+## Producción
 
-El dashboard tampoco recibe las credenciales de las fuentes ni escritura sobre
-el almacenamiento documental. La página **Operaciones** llama a un runner HTTP
-visible sólo dentro de la red Docker. El runner acepta únicamente Gmail, Mercado
-Pago y SIAT TGI, serializa sus ejecuciones y reutiliza los comandos existentes,
-que terminan con `dbt build`.
-
-El esquema legado `raw` se mantiene como camino de compatibilidad para
-instalaciones existentes. Su migración a Bronze es repetible y no elimina el
-origen.
+La imagen única contiene Django, CLI y dbt. `web` corre Gunicorn como usuario sin
+privilegios y sirve archivos versionados mediante WhiteNoise. `sync-runner` usa la
+misma imagen con otro entrypoint y sólo él monta credenciales y datos con escritura.
+El servicio `migrate` ejecuta preparación forward-only antes del reemplazo.

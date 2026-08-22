@@ -8,6 +8,7 @@ __pycache__/
 dbt/.user.yml
 dbt/logs/
 dbt/target/
+staticfiles/
 
 # Manual data imports; keep the directory itself in the repository.
 data/raw/*

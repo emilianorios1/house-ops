@@ -76,7 +76,7 @@ def run_transform() -> bool:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="House Ledger data tools")
+    parser = argparse.ArgumentParser(description="House Ops data tools")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("init-db", help="Create Bronze/Silver/Gold PostgreSQL schemas")
     subparsers.add_parser("transform", help="Build and test the dbt analytics models")
@@ -134,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers.add_parser(
         "configure-mercadopago",
-        help="Create/update the API report format required by House Ledger",
+        help="Create/update the API report format required by House Ops",
     )
     subparsers.add_parser(
         "sync-siat-tgi",

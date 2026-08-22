@@ -1,0 +1,6 @@
+{% load house_ops %}
+<form method="get" class="d-flex align-items-end gap-2 mb-3">
+  <div><label class="form-label small" for="month">Mes</label><input class="form-control" id="month" type="month" name="month" value="{{ month|month_value }}"></div>
+  {% if search is not None %}<div class="flex-grow-1"><label class="form-label small" for="q">Buscar</label><input class="form-control" id="q" name="q" value="{{ search }}"></div>{% endif %}
+  <button class="btn btn-primary touch-target" type="submit">Aplicar</button>
+</form>

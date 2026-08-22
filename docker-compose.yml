@@ -14,6 +14,13 @@ x-app-environment: &app-environment
   HOME_LAB_DBT_PROJECT_DIR: /workspace/dbt
   PYTHONPATH: /workspace/src
 
+x-web-environment: &web-environment
+  <<: *app-environment
+  DJANGO_SETTINGS_MODULE: house_ops.settings
+  HOUSE_OPS_SECRET_KEY: ${HOUSE_OPS_SECRET_KEY}
+  HOUSE_OPS_DEBUG: ${HOUSE_OPS_DEBUG:-true}
+  HOUSE_OPS_ALLOWED_HOSTS: ${HOUSE_OPS_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
+
 x-sync-environment: &sync-environment
   <<: *app-environment
   GMAIL_CLIENT_SECRET_PATH: /secrets/gmail_client_secret.json
@@ -55,24 +62,21 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
 
-  dashboard:
+  web:
     build:
       context: .
-      dockerfile: Dockerfile.dashboard
+      dockerfile: Dockerfile
     image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
     environment:
-      <<: *app-environment
-      HOME_LAB_OPERATIONS_PASSWORD: ${HOME_LAB_OPERATIONS_PASSWORD:-}
+      <<: *web-environment
       HOME_LAB_SYNC_RUNNER_URL: http://sync-runner:8080
     command:
-      - streamlit
-      - run
-      - /workspace/src/home_lab/dashboard/app.py
-      - --server.address=0.0.0.0
-      - --server.port=8501
-      - --server.runOnSave=true
+      - python
+      - /app/manage.py
+      - runserver
+      - 0.0.0.0:8000
     ports:
-      - "127.0.0.1:${HOME_LAB_DEV_DASHBOARD_PORT:-8502}:8501"
+      - "127.0.0.1:${HOUSE_OPS_DEV_WEB_PORT:-8502}:8000"
     volumes: *app-volumes
     depends_on:
       postgres:
@@ -82,7 +86,7 @@ services:
         - CMD
         - python
         - -c
-        - "from urllib.request import urlopen; urlopen('http://localhost:8501/_stcore/health', timeout=3)"
+        - "from urllib.request import urlopen; urlopen('http://localhost:8000/health/', timeout=3)"
       interval: 10s
       timeout: 5s
       retries: 12
@@ -117,8 +121,12 @@ services:
     profiles: ["ops"]
     user: "${UID:-1000}:${GID:-1000}"
     environment:
-      <<: *app-environment
-    command: ["sh", "-ec", "home-lab init-db && home-lab transform"]
+      <<: *web-environment
+      HOUSE_OPS_ADMIN_USERNAME: ${HOUSE_OPS_ADMIN_USERNAME:-emiliano}
+      HOUSE_OPS_ADMIN_PASSWORD: ${HOUSE_OPS_ADMIN_PASSWORD}
+      HOUSE_OPS_SECOND_USERNAME: ${HOUSE_OPS_SECOND_USERNAME:-vitoria}
+      HOUSE_OPS_SECOND_PASSWORD: ${HOUSE_OPS_SECOND_PASSWORD}
+    command: ["sh", "-ec", "home-lab init-db && home-lab transform && python manage.py migrate --noinput && python manage.py bootstrap_house_ops"]
     volumes: *app-volumes
     depends_on:
       postgres:
