@@ -154,7 +154,7 @@ profiles. It requires the configured local PostgreSQL instance.
   1. Inspect `git status` and preserve all existing user changes.
   2. Create a short, filesystem-safe task slug.
   3. Create a new branch named `codex/<slug>` and a linked worktree at
-     `../worktrees/home-lab/<slug>`, based on the current `HEAD`.
+     `../worktrees/house-ops/<slug>`, based on the current `HEAD`.
   4. From the new worktree, run `scripts/init-worktree.sh` before any test,
      Compose, or application command. This creates the worktree's isolated
      `.env`, `.venv`, ports, Compose project, database volume, and data paths.

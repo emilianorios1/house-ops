@@ -1,6 +1,6 @@
 FROM python:3.12-slim-bookworm AS runtime
 
-LABEL org.opencontainers.image.source="https://github.com/emilianorios1/house-ledger"
+LABEL org.opencontainers.image.source="https://github.com/emilianorios1/house-ops"
 
 ENV HOME=/tmp \
     HOME_LAB_DBT_PROJECT_DIR=/app/dbt \
