@@ -154,8 +154,8 @@ El parser `zetace_expenses` extrae:
 
 - consorcio, unidad, período y fecha de emisión;
 - primer y segundo vencimiento con sus importes;
-- expensas generales y extraordinarias;
-- saldo anterior y cobranzas.
+- expensas generales, extraordinarias y punitorios;
+- saldo anterior y cobranzas firmadas para explicar el importe exigible;
 
 Cada resultado conserva nombre y versión del parser. Sus estados posibles son
 `parsed`, `unsupported` y `failed`, lo que permite corregirlo y reprocesar sin

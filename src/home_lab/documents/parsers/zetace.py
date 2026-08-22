@@ -10,7 +10,7 @@ from typing import Any
 
 
 PARSER_NAME = "zetace_expenses"
-PARSER_VERSION = "1.0.0"
+PARSER_VERSION = "1.1.0"
 
 MONTHS = {
     "ENERO": 1,
@@ -146,6 +146,7 @@ def parse(text: str) -> dict[str, Any]:
     for code, label in (
         ("general_expenses", r"EXPENSAS\s+GENERALES"),
         ("extraordinary_expenses", r"EXPENSAS\s+EXTRAORDINARIAS"),
+        ("punitive_interest", r"PUNITORIOS"),
     ):
         amount = _amount_line(text, label)
         if amount is not None:

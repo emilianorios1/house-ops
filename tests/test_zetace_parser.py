@@ -30,6 +30,19 @@ Período: JUNIO / 2026
 63450.00EXPENSAS EXTRAORDINARIAS
 """
 
+OVERDUE_TEXT = """
+Consorcio: EDIFICIO EJEMPLO
+Fecha de Emisión: 01/08/2026
+U. 01-01
+Período: JULIO / 2026
+1er.Vencim.: 15/08/2026 $ 59000.00
+2do.Vencim.: 22/08/2026 $ 60000.00
+EXPENSAS GENERALES 50000.00
+SALDO ANTERIOR 10000.00
+COBRANZAS -2000.00
+PUNITORIOS 1000.00
+"""
+
 
 def test_parses_zeta_expense_statement() -> None:
     assert supports(SAMPLE_TEXT)
@@ -55,3 +68,15 @@ def test_parses_reordered_text_emitted_by_pypdf() -> None:
     assert result["unit"] == "04-02"
     assert result["first_due_amount"] == "116839.47"
     assert result["second_due_amount"] == "119176.26"
+
+
+def test_components_and_account_activity_match_an_overdue_first_due() -> None:
+    result = parse(OVERDUE_TEXT)
+    component_total = sum(Decimal(item["amount"]) for item in result["concepts"])
+    account_total = Decimal(result["previous_balance"]) + Decimal(result["collections"])
+
+    assert {item["code"] for item in result["concepts"]} == {
+        "general_expenses",
+        "punitive_interest",
+    }
+    assert component_total + account_total == Decimal(result["first_due_amount"])

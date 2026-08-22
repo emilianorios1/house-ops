@@ -16,7 +16,7 @@ from home_lab.documents.parsers import (
 
 
 PARSER_NAME = "financial_document_router"
-PARSER_VERSION = "1.6.0"
+PARSER_VERSION = "1.7.0"
 
 
 PARSERS = (
