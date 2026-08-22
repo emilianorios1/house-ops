@@ -2,10 +2,16 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from house_ops.work.models import Routine, RoutineCompletion, Task
+
+
+def test_settings_resolve_the_house_ops_project_root() -> None:
+    assert (settings.BASE_DIR / "manage.py").is_file()
+    assert (settings.BASE_DIR / "src" / "house_ops" / "static").is_dir()
 
 
 @pytest.fixture

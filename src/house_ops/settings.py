@@ -11,7 +11,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+_invocation_root = Path.cwd()
+_default_base_dir = (
+    _invocation_root
+    if (_invocation_root / "manage.py").is_file()
+    else Path(__file__).resolve().parents[2]
+)
+BASE_DIR = Path(os.getenv("HOUSE_OPS_BASE_DIR", _default_base_dir)).resolve()
 SECRET_KEY = os.getenv("HOUSE_OPS_SECRET_KEY", "house-ops-build-only-key")
 DEBUG = os.getenv("HOUSE_OPS_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [
