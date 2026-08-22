@@ -118,6 +118,9 @@ scripts/change-operations-password.sh
 # Guardar un nuevo token de Afip SDK sin mostrarlo y recrear el dashboard
 scripts/set-afip-sdk-access-token.sh
 
+# Abrir Google y volver a autorizar la lectura de Gmail
+scripts/reauthorize-gmail.sh
+
 # Ejecutar ingestas con los mismos datos persistentes de producción
 ~/.config/home-lab/production-compose.sh run --rm tools sync-gmail
 ~/.config/home-lab/production-compose.sh run --rm tools sync-mercadopago
@@ -133,6 +136,8 @@ Los secretos de Gmail deben copiarse a
 `~/.config/home-lab/secrets/gmail_client_secret.json` y
 `gmail_token.json`. Las demás credenciales se editan únicamente en
 `~/.config/home-lab/prod.env`, cuyo modo debe permanecer en `0600`.
+Si Google invalida el acceso, `scripts/reauthorize-gmail.sh` abre el flujo de
+autorización y guarda el token nuevo directamente en esa ubicación productiva.
 La clave de **Operaciones** se consulta o reemplaza en ese mismo archivo; nunca
 debe incorporarse al repositorio. El token de Afip SDK se rota primero desde el
 proveedor y luego se carga con `scripts/set-afip-sdk-access-token.sh`; no debe
