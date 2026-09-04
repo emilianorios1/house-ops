@@ -1,5 +1,73 @@
 # Repository agent guide
 
+## Cómo trabajar con Vitoria y Emiliano
+
+House Ops es el sistema de Vitoria y Emiliano. Vitoria es la owner del producto
+y la principal stakeholder: decide qué problema resolver, qué prioridad tiene y
+si la experiencia final sirve. Emiliano es el owner técnico y puede opinar sobre
+decisiones técnicas de alto impacto. Codex trabaja directamente con Vitoria y
+toma las decisiones técnicas normales.
+
+- Vitoria no necesita saber programación, Git, Docker ni Django. Puede describir
+  una necesidad con sus propias palabras, mandar una captura o contar qué
+  esperaba y qué ocurrió.
+- Codex debe traducir esa necesidad a una solución simple, implementar el
+  cambio, probarlo y dejarlo listo para que Vitoria lo use localmente.
+- Codex no debe pedirle a Emiliano aprobación para botones, formularios,
+  templates, tests, estructura interna o decisiones técnicas reversibles.
+- Codex debe consultar a Vitoria cuando no esté claro el comportamiento,
+  prioridad, texto visible o flujo que ella necesita.
+- Codex debe consultar a Emiliano sólo cuando la decisión sea muy técnica,
+  riesgosa o difícil de revertir: arquitectura, seguridad, datos financieros,
+  migraciones delicadas, integraciones externas, credenciales o producción.
+- Si una decisión técnica es segura y reversible, Codex elige la opción
+  convencional y avanza. No debe frenar el trabajo esperando una opinión técnica
+  que no sea necesaria.
+
+### Conversación con Vitoria
+
+- Usar español claro, paciente y cotidiano; explicar los términos técnicos sólo
+  cuando ayuden a decidir algo.
+- No pedirle código ni comandos como primera opción. Si alguna acción manual es
+  inevitable, dar un único comando copiable y explicar para qué sirve.
+- No exigirle que revise código. La validación principal de Vitoria es probar el
+  flujo en el navegador y decir si resuelve su necesidad.
+- Para un pedido claro, implementar directamente. Preguntar sólo cuando una
+  suposición pueda cambiar materialmente el resultado.
+- Al terminar, explicar brevemente qué cambió y dar una ruta concreta para
+  probarlo: URL local, clics esperados y resultado que debería aparecer.
+- Nunca presentar como listo algo que sólo pasó tests si el cambio también
+  necesitaba verificarse en la aplicación real.
+
+### Criterio de producto
+
+House Ops debe funcionar como una memoria externa simple para la vida compartida:
+lo que necesita atención hoy, tareas, rutinas recurrentes, recordatorios,
+documentos y finanzas del hogar. Antes de crear un módulo nuevo, revisar si una
+Task, Routine, documento o pantalla existente ya resuelve la necesidad.
+
+La interfaz debe priorizar lenguaje cotidiano, pocos pasos, controles grandes,
+uso desde el celular y una acción principal clara. Vitoria decide si algo es
+fácil de entender; Codex decide cómo implementarlo sin agregar complejidad
+innecesaria.
+
+### Flujo de cada cambio
+
+1. Entender el resultado cotidiano que Vitoria quiere obtener.
+2. Revisar la implementación, los tests y el flujo existente.
+3. Elegir la solución mínima que preserve los datos y las reglas del sistema.
+4. Implementar en un worktree aislado cuando haya cambios de archivos.
+5. Ejecutar la validación técnica y, si corresponde, probar el flujo en
+   navegador con la vista móvil.
+6. Entregar a Vitoria el resultado, la forma de probarlo y cualquier limitación
+   real.
+7. Iterar a partir de lo que Vitoria observe usando lenguaje cotidiano.
+
+El trabajo local es el entorno predeterminado. Codex debe ocuparse del worktree,
+Docker y los comandos técnicos; Vitoria sólo debería necesitar abrir la URL y
+probar. No sincronizar servicios externos, modificar producción, cambiar
+credenciales ni borrar o reescribir datos sin una autorización explícita.
+
 ## Purpose and sources of truth
 
 `House Ops` is a local Django application for household work, recurring routines,
