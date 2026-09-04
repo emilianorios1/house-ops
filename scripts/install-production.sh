@@ -10,7 +10,7 @@ secrets_dir="${config_dir}/secrets"
 backup_dir="${data_home}/home-lab/backups"
 prod_env="${config_dir}/prod.env"
 image="${1:-home-lab:local}"
-production_bind="${HOME_LAB_PROD_BIND:-0.0.0.0}"
+production_bind="${HOME_LAB_PROD_BIND:-127.0.0.1}"
 production_port="${HOME_LAB_PROD_PORT:-8501}"
 
 mkdir -p "$config_dir" "$data_dir" "$secrets_dir" "$backup_dir"
@@ -35,6 +35,7 @@ HOME_LAB_BACKUP_RETENTION_DAYS=14
 HOME_LAB_HOST_UID=$(id -u)
 HOME_LAB_HOST_GID=$(id -g)
 HOUSE_OPS_SECRET_KEY=${django_secret}
+HOUSE_OPS_HTTPS=true
 HOUSE_OPS_ALLOWED_HOSTS=*
 HOUSE_OPS_ADMIN_USERNAME=emiliano
 HOUSE_OPS_ADMIN_PASSWORD=${admin_password}

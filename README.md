@@ -92,6 +92,12 @@ La instalación local de producción conserva deliberadamente el proyecto
 `home-lab-prod` y el volumen `home-lab-prod-postgres-data`, de modo que actualizar
 la application layer no reemplaza la base existente.
 
+Cuando House Ops comparte un VPS con otra aplicación que ya administra Caddy,
+House Ops no debe iniciar otro proxy ni publicar 80/443. El `web` se conecta a
+la red `home-lab-prod-frontend` con el alias `house-ops-web`; el Caddy existente
+puede enrutar un subdominio hacia `house-ops-web:8000`. Mantener
+`HOME_LAB_PROD_BIND=127.0.0.1` deja el puerto de diagnóstico fuera de Internet.
+
 ```bash
 scripts/install-production.sh home-lab:local
 ```
