@@ -81,19 +81,47 @@ def test_job_endpoint_accepts_only_allowlisted_async_command(
         return subprocess.CompletedProcess(args, 0)
 
     monkeypatch.setattr(sync_runner.subprocess, "run", run)
-    monkeypatch.setattr(sync_runner, "_update_operation", lambda _id, status, _message="": statuses.append(status))
+    monkeypatch.setattr(sync_runner, "_update_operation", lambda _id, status, _message="", _log="": statuses.append(status))
 
     status, payload = request(runner_server, "POST", path, headers=operation_headers())
     assert status == 202
     assert payload == {"message": "Operación iniciada."}
     wait_for_runner()
     assert calls == [["home-lab", command]]
-    assert statuses == ["running", "succeeded"]
+    assert statuses == ["running", "running", "succeeded"]
 
 
 def test_unknown_job_is_rejected(runner_server: tuple[str, int]) -> None:
     status, _ = request(runner_server, "POST", "/jobs/arbitrary", headers=operation_headers())
     assert status == 404
+
+
+def test_failed_job_persists_command_output(
+    runner_server: tuple[str, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    updates: list[tuple[str, str, str]] = []
+
+    def run(args: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 1, stdout="OAuth expired\n")
+
+    monkeypatch.setattr(sync_runner.subprocess, "run", run)
+    monkeypatch.setattr(
+        sync_runner,
+        "_update_operation",
+        lambda _id, status, message="", log="": updates.append((status, message, log)),
+    )
+
+    status, _ = request(
+        runner_server,
+        "POST",
+        "/jobs/sync/gmail",
+        headers=operation_headers(),
+    )
+    assert status == 202
+    wait_for_runner()
+    assert updates[-1][0] == "failed"
+    assert "OAuth expired" in updates[-1][2]
 
 
 def test_missing_operation_id_is_rejected(runner_server: tuple[str, int]) -> None:

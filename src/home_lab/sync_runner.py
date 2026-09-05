@@ -27,13 +27,21 @@ JOB_COMMANDS = {
 }
 STATEMENT_IMPORT_PATH = "/jobs/import/mercadopago-statement"
 MAX_STATEMENT_BYTES = 10 * 1024 * 1024
+# ponytail: cap the in-dashboard tail at 20k characters; add external log
+# storage only if real runs outgrow this limit.
+MAX_OPERATION_LOG_LENGTH = 20_000
 # ponytail: one process and one global lock fit a two-person home; use a durable
 # queue only if concurrent or cross-host workers become a measured need.
 SYNC_LOCK = Lock()
 
 
-def _update_operation(operation_id: UUID, status: str, message: str = "") -> None:
-    assignments = ["status = :status", "message = :message"]
+def _update_operation(
+    operation_id: UUID,
+    status: str,
+    message: str = "",
+    log: str = "",
+) -> None:
+    assignments = ["status = :status", "message = :message", "log = :log"]
     if status == "running":
         assignments.append("started_at = now()")
     if status in {"succeeded", "failed"}:
@@ -49,57 +57,82 @@ def _update_operation(operation_id: UUID, status: str, message: str = "") -> Non
                     "operation_id": operation_id,
                     "status": status,
                     "message": message[:500],
+                    "log": log[-MAX_OPERATION_LOG_LENGTH:],
                 },
             )
     except Exception:
         logging.exception("Could not update House Ops operation %s", operation_id)
 
 
-def _execute(operation_id: UUID, commands: tuple[tuple[str, ...], ...]) -> None:
-    _update_operation(operation_id, "running", "Operación en ejecución.")
+def _execute_commands(
+    operation_id: UUID,
+    commands: tuple[tuple[str, ...], ...],
+    *,
+    running_message: str,
+    success_message: str,
+    failure_message: str,
+) -> None:
+    log = ""
+    _update_operation(operation_id, "running", running_message, log)
     try:
         for command in commands:
             result = subprocess.run(
                 list(command),
                 check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            log = (log + (result.stdout or ""))[-MAX_OPERATION_LOG_LENGTH:]
+            _update_operation(
+                operation_id,
+                "running",
+                f"{command[1]} terminó con código {result.returncode}.",
+                log,
             )
             if result.returncode:
                 raise RuntimeError(f"{command[1]} terminó con código {result.returncode}")
-    except (OSError, RuntimeError):
+    except (OSError, RuntimeError) as error:
         logging.exception("Operation %s failed", operation_id)
-        _update_operation(operation_id, "failed", "La operación falló. Revisá los logs del runner.")
+        log = (log + f"\nERROR: {error}\n")[-MAX_OPERATION_LOG_LENGTH:]
+        _update_operation(operation_id, "failed", f"{failure_message} {error}", log)
     else:
-        _update_operation(operation_id, "succeeded", "Operación completada.")
+        _update_operation(operation_id, "succeeded", success_message, log)
+
+
+def _execute(operation_id: UUID, commands: tuple[tuple[str, ...], ...]) -> None:
+    try:
+        _execute_commands(
+            operation_id,
+            commands,
+            running_message="Operación en ejecución.",
+            success_message="Operación completada.",
+            failure_message="La operación falló.",
+        )
     finally:
         SYNC_LOCK.release()
 
 
 def _execute_statement(operation_id: UUID, filename: str, content: bytes) -> None:
-    _update_operation(operation_id, "running", "Importando extracto.")
     try:
         with TemporaryDirectory() as temporary_directory:
             source = Path(temporary_directory) / filename
             source.write_bytes(content)
-            commands = (
-                ("home-lab", "import-account-statement", str(source)),
-                ("home-lab", "transform"),
+            _execute_commands(
+                operation_id,
+                (
+                    ("home-lab", "import-account-statement", str(source)),
+                    ("home-lab", "transform"),
+                ),
+                running_message="Importando extracto.",
+                success_message="Extracto importado y datos actualizados.",
+                failure_message="No se pudo importar el extracto.",
             )
-            for command in commands:
-                result = subprocess.run(
-                    list(command),
-                    check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                if result.returncode:
-                    raise RuntimeError(f"{command[1]} terminó con código {result.returncode}")
-    except (OSError, RuntimeError):
+    except OSError as error:
         logging.exception("Statement operation %s failed", operation_id)
-        _update_operation(operation_id, "failed", "No se pudo importar el extracto. Revisá formato y logs.")
-    else:
-        _update_operation(operation_id, "succeeded", "Extracto importado y datos actualizados.")
+        _update_operation(operation_id, "failed", f"No se pudo importar el extracto. {error}")
     finally:
         SYNC_LOCK.release()
 

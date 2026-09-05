@@ -60,6 +60,11 @@ La topología productiva es:
 - `migrate`: profile efímero para schema, dbt y migraciones;
 - `tools`: CLI efímera para mantenimiento explícito.
 
+La pestaña Operaciones muestra la salida combinada de cada comando del runner
+(hasta los últimos 20.000 caracteres), también cuando la operación falla. Para
+diagnóstico de producción, verificar siempre `https://casa.bordarteuniformes.com.ar`
+y el servicio `sync-runner` que atiende ese despliegue.
+
 ## Deploy seguro
 
 ```bash
