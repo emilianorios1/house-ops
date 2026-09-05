@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+if [[ "$(hostname -s)" != "bordarte" ]]; then
+    echo "Production is VPS-only (bordarte); this laptop is development only." >&2
+    exit 1
+fi
+
 if (( $# != 1 )); then
     echo "Usage: $0 <container-image-or-digest>" >&2
     exit 2

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+if [[ "$(hostname -s)" != "bordarte" ]]; then
+    echo "The production GitHub runner belongs on VPS bordarte, not this laptop." >&2
+    exit 1
+fi
+
 for command_name in gh curl tar sha256sum systemctl; do
     if ! command -v "$command_name" >/dev/null; then
         echo "Missing required command: $command_name" >&2
@@ -13,7 +18,7 @@ repository="$(cd "$repo_root" && gh repo view --json nameWithOwner --jq .nameWit
 runner_home="${XDG_DATA_HOME:-${HOME}/.local/share}/github-actions-runner/home-lab"
 service_dir="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
 service_file="${service_dir}/github-actions-runner-home-lab.service"
-runner_name="${HOSTNAME:-$(hostname)}-home-lab-prod"
+runner_name="${HOSTNAME:-$(hostname)}-house-ops-vps"
 
 mkdir -p "$runner_home" "$service_dir"
 
@@ -71,7 +76,7 @@ PY
             --url "https://github.com/${repository}" \
             --token "$registration_token" \
             --name "$runner_name" \
-            --labels home-lab-prod \
+            --labels vps-production \
             --work _work \
             --unattended \
             --replace
@@ -85,7 +90,7 @@ fi
 
 cat > "$service_file" <<EOF
 [Unit]
-Description=GitHub Actions runner for home-lab production
+Description=GitHub Actions runner for House Ops VPS production
 Wants=network-online.target
 After=network-online.target
 

@@ -89,6 +89,12 @@ PostgreSQL with dbt and serves a responsive server-rendered UI. It uses Python
 - The production instance on this VPS is served at
   `https://casa.bordarteuniformes.com.ar`; use this domain as the canonical
   target for real health, browser, and smoke checks.
+- This laptop is development only. Its `docker-compose.yml`, `home-lab-dev`,
+  linked worktrees, and any old local containers are never production. Do not
+  run `production-compose.sh`, production syncs, or production deploys here.
+- Production deploys run on the VPS host `bordarte` through the GitHub Actions
+  runner label `vps-production`; a self-hosted runner on this laptop must never
+  carry a production runner label.
 - Diagnose the public domain, reverse proxy, and services behind it as one
   deployment. Local ports, Docker project names, images, and worktrees are
   supporting evidence only and must not be assumed to identify production.
@@ -243,9 +249,8 @@ profiles. It requires the configured local PostgreSQL instance.
   5. Perform every file modification and all task-specific validation from that
      worktree. Do not modify the primary checkout.
 - `scripts/dev-up.sh` starts isolated PostgreSQL, dbt and Django migrations by
-  default; add `--full` for browser work. Use `--snapshot` only when representative production
-  data is required. Treat that database as sensitive production-derived data:
-  never print, export, commit, or copy its contents into fixtures or logs.
+  default; add `--full` for browser work. Production snapshots are not
+  available from the laptop; use local or synthetic development data.
 - Choose a unique slug if the intended branch or directory already exists.
 - Do not copy, stash, reset, clean, or otherwise alter uncommitted changes from
   the primary checkout unless the user explicitly asks.

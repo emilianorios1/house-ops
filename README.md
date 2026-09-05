@@ -43,6 +43,11 @@ acotado; no replica el warehouse como modelos ORM.
 
 ## Desarrollo reproducible
 
+La laptop es sólo desarrollo. `docker-compose.yml` usa PostgreSQL, datos,
+puertos y worktrees locales; no es la instalación productiva ni monta sus
+documentos. Los comandos `scripts/dev-up.sh` y `docker compose` son para este
+entorno. No se restauran snapshots de producción desde la laptop.
+
 En el checkout principal, las tareas con cambios deben usar el worktree aislado
 descripto en `AGENTS.md`. Ya dentro de un worktree:
 
@@ -89,9 +94,11 @@ sincronización, reportes y mantenimiento. Las credenciales reales permanecen en
 
 ## Producción
 
-La instalación local de producción conserva deliberadamente el proyecto
-`home-lab-prod` y el volumen `home-lab-prod-postgres-data`, de modo que actualizar
-la application layer no reemplaza la base existente.
+La única producción es el VPS `bordarte`, publicado en
+`https://casa.bordarteuniformes.com.ar`. Conserva deliberadamente el proyecto
+Compose `home-lab-prod` y el volumen `home-lab-prod-postgres-data`, de modo que
+actualizar la application layer no reemplaza la base existente. La laptop no
+puede operar ese Compose.
 
 Cuando House Ops comparte un VPS con otra aplicación que ya administra Caddy,
 House Ops no debe iniciar otro proxy ni publicar 80/443. El `web` se conecta a
@@ -100,13 +107,16 @@ puede enrutar un subdominio hacia `house-ops-web:8000`. Mantener
 `HOME_LAB_PROD_BIND=127.0.0.1` deja el puerto de diagnóstico fuera de Internet.
 
 ```bash
-scripts/install-production.sh home-lab:local
+ssh root@2.28.60.154
+cd /opt/house-ops
+scripts/install-production.sh ghcr.io/emilianorios1/house-ops:latest
 ```
 
 Cada despliegue posterior usa `scripts/deploy-production.sh <imagen>`. El proceso
 valida Compose, toma un backup verificable si PostgreSQL ya existe, ejecuta
 `init-db`, `dbt build` y migraciones forward-only, y sólo entonces reemplaza `web`
-y `sync-runner`. La salud pública es `GET /health/`.
+y `sync-runner`. La salud pública es `GET /health/`. El workflow de GitHub Actions
+usa exclusivamente el runner `vps-production` y no el runner de la laptop.
 
 ## Tests y QA
 

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+if [[ "$(hostname -s)" != "bordarte" ]]; then
+    echo "Production is VPS-only (bordarte); this laptop is development only." >&2
+    exit 1
+fi
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
 data_home="${XDG_DATA_HOME:-${HOME}/.local/share}"

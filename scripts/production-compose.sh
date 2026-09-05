@@ -7,6 +7,11 @@ compose_file="${config_dir}/compose.production.yaml"
 prod_env="${config_dir}/prod.env"
 deployment_env="${config_dir}/deployment.env"
 
+if [[ "$(hostname -s)" != "bordarte" ]]; then
+    echo "Production is VPS-only (bordarte); use docker-compose.yml for local development." >&2
+    exit 1
+fi
+
 for required_file in "$compose_file" "$prod_env" "$deployment_env"; do
     if [[ ! -f "$required_file" ]]; then
         echo "Missing production file: $required_file" >&2
