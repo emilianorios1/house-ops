@@ -78,7 +78,9 @@ scripts/deploy-production.sh ghcr.io/owner/home-lab@sha256:...
 ```
 
 El deploy automático corre en GitHub Actions sobre el runner `vps-production`.
-El runner de la laptop no puede tomar trabajos de producción.
+El runner de la laptop no puede tomar trabajos de producción. En el VPS, el
+workflow invoca `deploy-production.sh` con una regla `sudo` limitada a ese
+script; no requiere ni debe tener sudo general.
 
 Secuencia:
 
