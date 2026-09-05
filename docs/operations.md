@@ -6,7 +6,7 @@
 | --- | --- | --- | --- | --- |
 | checkout principal histórico | `home-lab-dev` | puerto configurado | host local | volumen propio |
 | worktree | `home-lab-wt-<slug>` | puerto aleatorio | puerto aleatorio | volumen y `data/` propios |
-| producción | `home-lab-prod` | `0.0.0.0:8501` | sólo red interna | volumen histórico y data dir |
+| producción | `home-lab-prod` | `127.0.0.1:8501` | sólo red interna | volumen histórico y data dir |
 
 No copies `.env`, OAuth tokens, bases ni documentos entre checkouts.
 
@@ -59,6 +59,12 @@ La topología productiva es:
 - `sync-runner`: red backend/egress, secretos y `/data` con escritura;
 - `migrate`: profile efímero para schema, dbt y migraciones;
 - `tools`: CLI efímera para mantenimiento explícito.
+
+Si el VPS ya tiene un Caddy público, no iniciar otro. El servicio `web` publica
+un puerto de diagnóstico sólo en loopback y también ofrece el alias
+`house-ops-web` dentro de `home-lab-prod-frontend`; el Caddy existente puede
+conectarse a esa red y usar `reverse_proxy house-ops-web:8000` para el subdominio
+de House Ops.
 
 La pestaña Operaciones muestra la salida combinada de cada comando del runner
 (hasta los últimos 20.000 caracteres), también cuando la operación falla. Para

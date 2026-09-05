@@ -28,6 +28,11 @@ ALLOWED_HOSTS = [
     ).split(",")
     if host.strip()
 ]
+HOUSE_OPS_HTTPS = os.getenv("HOUSE_OPS_HTTPS", "false").lower() == "true"
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_SECURE = HOUSE_OPS_HTTPS
+CSRF_COOKIE_SECURE = HOUSE_OPS_HTTPS
+SECURE_HSTS_SECONDS = 31_536_000 if HOUSE_OPS_HTTPS else 0
 
 
 def _database() -> dict[str, object]:

@@ -15,6 +15,7 @@ x-web-environment: &web-environment
   DJANGO_SETTINGS_MODULE: house_ops.settings
   HOUSE_OPS_SECRET_KEY: ${HOUSE_OPS_SECRET_KEY:?HOUSE_OPS_SECRET_KEY must be set}
   HOUSE_OPS_DEBUG: "false"
+  HOUSE_OPS_HTTPS: ${HOUSE_OPS_HTTPS:-false}
   HOUSE_OPS_ALLOWED_HOSTS: ${HOUSE_OPS_ALLOWED_HOSTS:-*}
 
 x-sync-environment: &sync-environment
@@ -72,12 +73,14 @@ services:
       AFIP_SDK_ACCESS_TOKEN: ${AFIP_SDK_ACCESS_TOKEN:-}
       HOME_LAB_SYNC_RUNNER_URL: http://sync-runner:8080
     ports:
-      - "${HOME_LAB_PROD_BIND:-0.0.0.0}:${HOME_LAB_PROD_PORT:-8501}:8000"
+      - "${HOME_LAB_PROD_BIND:-127.0.0.1}:${HOME_LAB_PROD_PORT:-8501}:8000"
     volumes:
       - ${HOME_LAB_PROD_DATA_DIR:?HOME_LAB_PROD_DATA_DIR must be set}:/data:ro
     networks:
-      - backend
-      - frontend
+      backend: {}
+      frontend:
+        aliases:
+          - house-ops-web
     depends_on:
       postgres:
         condition: service_healthy
