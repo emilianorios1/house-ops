@@ -66,6 +66,11 @@ un puerto de diagnóstico sólo en loopback y también ofrece el alias
 conectarse a esa red y usar `reverse_proxy house-ops-web:8000` para el subdominio
 de House Ops.
 
+La pestaña Operaciones muestra la salida combinada de cada comando del runner
+(hasta los últimos 20.000 caracteres), también cuando la operación falla. Para
+diagnóstico de producción, verificar siempre `https://casa.bordarteuniformes.com.ar`
+y el servicio `sync-runner` que atiende ese despliegue.
+
 ## Deploy seguro
 
 ```bash

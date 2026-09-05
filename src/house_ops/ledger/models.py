@@ -15,6 +15,7 @@ class OperationRun(models.Model):
     action = models.CharField(max_length=40)
     status = models.CharField(max_length=12, choices=Status, default=Status.QUEUED)
     message = models.CharField(max_length=500, blank=True)
+    log = models.TextField(blank=True)
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         blank=True,
