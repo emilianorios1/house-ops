@@ -162,4 +162,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy by immutable digest
-        run: ./scripts/deploy-production.sh '${{ needs.publish.outputs.image }}@${{ needs.publish.outputs.digest }}'
+        run: sudo -n ./scripts/deploy-production.sh '${{ needs.publish.outputs.image }}@${{ needs.publish.outputs.digest }}'

@@ -95,6 +95,8 @@ PostgreSQL with dbt and serves a responsive server-rendered UI. It uses Python
 - Production deploys run on the VPS host `bordarte` through the GitHub Actions
   runner label `vps-production`; a self-hosted runner on this laptop must never
   carry a production runner label.
+- The VPS runner uses a restricted `sudo` rule for only
+  `scripts/deploy-production.sh`; do not grant it general root access.
 - Diagnose the public domain, reverse proxy, and services behind it as one
   deployment. Local ports, Docker project names, images, and worktrees are
   supporting evidence only and must not be assumed to identify production.
