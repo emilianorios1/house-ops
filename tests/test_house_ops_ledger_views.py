@@ -49,7 +49,10 @@ def test_main_ledger_pages_render_without_500(ledger_client, name: str, patches:
         for item in patchers:
             item.stop()
     assert response.status_code == 200
-    assert "House Ops" in response.content.decode()
+    content = response.content.decode()
+    assert "House Ops" in content
+    assert 'onchange="this.form.submit()"' in content
+    assert ">Aplicar<" not in content
 
 
 @pytest.mark.django_db
@@ -70,6 +73,8 @@ def test_shared_expenses_preserve_obligation_and_payment_values(ledger_client) -
     content = response.content.decode()
     assert "Pendiente" in content
     assert "Pagado" in content
+    assert 'onchange="this.form.submit()"' in content
+    assert 'type="submit">Aplicar' not in content
 
 
 @pytest.mark.django_db
