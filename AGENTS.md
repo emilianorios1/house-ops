@@ -16,6 +16,18 @@ PostgreSQL with dbt and serves a responsive server-rendered UI. It uses Python
   are English, while user-facing documentation and House Ops copy are generally
   Spanish.
 
+## Production VPS
+
+- The production instance on this VPS is served at
+  `https://casa.bordarteuniformes.com.ar`; use this domain as the canonical
+  target for real health, browser, and smoke checks.
+- Diagnose the public domain, reverse proxy, and services behind it as one
+  deployment. Local ports, Docker project names, images, and worktrees are
+  supporting evidence only and must not be assumed to identify production.
+- Before changing production, identify the active proxy/service path and
+  deployed revision with read-only checks. Do not trigger synchronization,
+  authentication, or data mutation during diagnosis unless explicitly asked.
+
 ## Architecture invariants
 
 - Bronze preserves reproducible source records, ingestion metadata, stored

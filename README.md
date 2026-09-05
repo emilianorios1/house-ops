@@ -79,8 +79,9 @@ docker compose --env-file .env config
 
 La web no recibe tokens externos. Envía una orden allow-listed al runner privado,
 recibe `202 Accepted` y muestra el estado por polling HTMX. El runner ejecuta una
-operación por vez y registra inicio, resultado y usuario solicitante en PostgreSQL;
-no necesita Celery ni Redis para este hogar.
+operación por vez y registra inicio, resultado, salida del comando y usuario
+solicitante en PostgreSQL; la pestaña Operaciones permite abrir esos logs. No
+necesita Celery ni Redis para este hogar.
 
 La CLI `home-lab` se conserva para importaciones, parser de documentos,
 sincronización, reportes y mantenimiento. Las credenciales reales permanecen en

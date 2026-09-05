@@ -111,6 +111,23 @@ def test_operation_is_queued_and_attributed(ledger_client) -> None:
 
 
 @pytest.mark.django_db
+def test_operation_status_shows_runner_log(ledger_client) -> None:
+    client, user = ledger_client
+    run = OperationRun.objects.create(
+        action="gmail",
+        status=OperationRun.Status.FAILED,
+        message="La operación falló.",
+        log="ERROR Gmail: OAuth expired",
+        requested_by=user,
+    )
+
+    response = client.get(reverse("ledger:operation_status", args=[run.id]))
+
+    assert response.status_code == 200
+    assert "OAuth expired" in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_statement_import_is_queued_without_credentials_in_browser(ledger_client) -> None:
     client, user = ledger_client
     upload = SimpleUploadedFile("extracto.csv", b"synthetic", content_type="text/csv")
