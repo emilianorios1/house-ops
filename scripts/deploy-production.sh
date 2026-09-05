@@ -154,8 +154,11 @@ if [[ -e "${systemd_user_dir}/home-lab-production.service" ]]; then
         "${systemd_user_dir}/home-lab-backup-verify.timer"
     ln -sfn "${config_dir}/home-lab-production.service" \
         "${systemd_user_dir}/home-lab-production.service"
-    systemctl --user daemon-reload
-    systemctl --user enable --now home-lab-backup-verify.timer
+    if systemctl --user daemon-reload 2>/dev/null; then
+        systemctl --user enable --now home-lab-backup-verify.timer
+    else
+        echo "User systemd reload skipped; production containers are already healthy."
+    fi
 fi
 
 echo "House Ops deployed with image $image at ${production_bind:-0.0.0.0}:${production_port:-8501}"
