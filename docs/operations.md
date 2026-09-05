@@ -4,9 +4,13 @@
 
 | Entorno | Proyecto Compose | Web | PostgreSQL | Persistencia |
 | --- | --- | --- | --- | --- |
-| checkout principal histórico | `home-lab-dev` | puerto configurado | host local | volumen propio |
-| worktree | `home-lab-wt-<slug>` | puerto aleatorio | puerto aleatorio | volumen y `data/` propios |
-| producción | `home-lab-prod` | `127.0.0.1:8501` | sólo red interna | volumen histórico y data dir |
+| desarrollo en la laptop | `home-lab-dev` | `127.0.0.1` | host local | volumen y `data/` locales |
+| worktree de desarrollo | `home-lab-wt-<slug>` | puerto aleatorio | puerto aleatorio | volumen y `data/` propios |
+| producción en VPS `bordarte` | `home-lab-prod` | `casa.bordarteuniformes.com.ar` | sólo red interna | volumen histórico y data dir |
+
+La laptop no es producción. Sus contenedores, puertos, worktrees y datos no
+identifican el VPS, aunque conserven nombres históricos parecidos. El script
+`production-compose.sh` sólo funciona en el host VPS `bordarte`.
 
 No copies `.env`, OAuth tokens, bases ni documentos entre checkouts.
 
@@ -23,15 +27,9 @@ modo privado, venv, puertos y nombres exclusivos. `dev-up.sh` inicia PostgreSQL,
 ejecuta `init-db`, `dbt build`, migrations y bootstrap. `--full` además construye
 la imagen y espera `web` y `sync-runner`.
 
-Para probar una migración sobre estructura representativa existente:
-
-```bash
-scripts/dev-up.sh --snapshot
-```
-
-Ese modo toma primero un backup productivo verificable y lo restaura únicamente
-en el volumen del worktree si todavía no existe Bronze. Es dato sensible: no se
-imprime, exporta ni usa como fixture.
+La laptop no restaura snapshots de producción. Para pruebas locales se usan sus
+datos aislados o fixtures sintéticos; los backups y documentos productivos sólo
+se operan en el VPS.
 
 ## Diagnóstico local
 
@@ -42,9 +40,11 @@ docker compose --env-file .env logs -f --tail=200 sync-runner
 curl --fail http://127.0.0.1:PUERTO/health/
 ```
 
-## Instalación productiva
+## Instalación productiva en el VPS
 
 ```bash
+ssh root@2.28.60.154
+cd /opt/house-ops
 scripts/install-production.sh home-lab:local
 ```
 
@@ -71,11 +71,14 @@ La pestaña Operaciones muestra la salida combinada de cada comando del runner
 diagnóstico de producción, verificar siempre `https://casa.bordarteuniformes.com.ar`
 y el servicio `sync-runner` que atiende ese despliegue.
 
-## Deploy seguro
+## Deploy seguro en el VPS
 
 ```bash
 scripts/deploy-production.sh ghcr.io/owner/home-lab@sha256:...
 ```
+
+El deploy automático corre en GitHub Actions sobre el runner `vps-production`.
+El runner de la laptop no puede tomar trabajos de producción.
 
 Secuencia:
 
