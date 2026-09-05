@@ -83,6 +83,9 @@ def test_critical_house_ops_flows_and_mobile_layout(page: Page) -> None:
     page.goto(f"{BASE_URL}/")
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     expect(page.locator(".navbar-toggler")).to_be_visible()
+    page.get_by_role("button", name="Abrir menú").click()
+    expect(page.get_by_role("link", name="Gastos compartidos", exact=True)).to_be_visible()
+    expect(page.get_by_role("link", name="Movimientos", exact=True)).to_be_visible()
     assert page.evaluate("typeof htmx !== 'undefined'")
     custom_css = page.locator("link[href*='house_ops/app']").get_attribute("href")
     assert custom_css

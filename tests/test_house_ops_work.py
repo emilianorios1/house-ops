@@ -44,6 +44,17 @@ def test_login_opens_house_ops_home(client, user) -> None:
 
 
 @pytest.mark.django_db
+def test_top_navigation_exposes_shared_expenses_and_movements(authenticated_client) -> None:
+    with patch("house_ops.ledger.repository.overview", return_value={}):
+        response = authenticated_client.get(reverse("home"))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert f'href="{reverse("ledger:shared_expenses")}">Gastos compartidos</a>' in content
+    assert f'href="{reverse("ledger:movements")}">Movimientos</a>' in content
+
+
+@pytest.mark.django_db
 def test_initial_ant_routine_is_monthly_and_due() -> None:
     routine = Routine.objects.get(title="Poner veneno para hormigas")
     assert routine.recurrence == Routine.Recurrence.MONTHS
