@@ -27,7 +27,7 @@ home-lab = "home_lab.cli:main"
 [project.optional-dependencies]
 dev = [
   "playwright>=1.55,<2",
-  "pytest>=8,<9",
+  "pytest>=8,<10",
   "pytest-django>=4.11,<5",
 ]
 
