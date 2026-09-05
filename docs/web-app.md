@@ -8,7 +8,9 @@ navegador.
 
 Todas las pantallas salvo `/health/` requieren sesión. Django Authentication
 administra los dos usuarios. La barra superior se convierte en offcanvas en
-teléfono y ofrece Inicio, Tareas, Rutinas, Ledger, Documentos y Operaciones.
+teléfono y ofrece Inicio, Tareas, Rutinas, Gastos compartidos, Movimientos,
+Documentos y Operaciones. El resumen general de Ledger sigue disponible en
+`/ledger/`.
 
 ## Home
 
