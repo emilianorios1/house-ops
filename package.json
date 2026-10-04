@@ -1,0 +1,54 @@
+{
+  "name": "house-ops",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "prisma generate && next build",
+    "start": "next start --hostname 0.0.0.0 --port 8000",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "tsx scripts/browser-tests.ts",
+    "test:browser": "playwright test",
+    "test:integration": "tsx scripts/integration-test.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:generate": "prisma generate",
+    "db:seed": "tsx scripts/seed.ts",
+    "dev:setup": "tsx scripts/local-setup.ts",
+    "import:legacy": "tsx scripts/import-legacy.ts",
+    "import:pdf": "tsx scripts/import-pdf.ts",
+    "import:records": "tsx scripts/import-records.ts",
+    "export:handoff": "tsx scripts/export-handoff.ts"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "dotenv": "^17.3.1",
+    "lucide-react": "^0.577.0",
+    "next": "16.3.8",
+    "next-auth": "5.0.0-beta.32",
+    "pdf-parse": "^2.4.5",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@tailwindcss/postcss": "^4.2.1",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "prettier": "^3.8.1",
+    "prisma": "6.19.3",
+    "tailwindcss": "^4.2.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

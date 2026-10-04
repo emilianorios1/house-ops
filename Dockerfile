@@ -1,34 +1,34 @@
-FROM python:3.12-slim-bookworm AS runtime
-
-LABEL org.opencontainers.image.source="https://github.com/emilianorios1/house-ops"
-
-ENV HOME=/tmp \
-    HOME_LAB_DBT_PROJECT_DIR=/app/dbt \
-    DJANGO_SETTINGS_MODULE=house_ops.settings \
-    PYTHONPATH=/app/src \
-    DBT_SEND_ANONYMOUS_USAGE_STATS=false \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
-
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN npx prisma generate
+COPY tsconfig.json next.config.ts postcss.config.mjs ./
+COPY src/app ./src/app
+COPY src/auth.ts ./src/auth.ts
+COPY src/components ./src/components
+COPY src/lib ./src/lib
+COPY scripts/migrate.ts scripts/seed.ts scripts/import-legacy.ts scripts/import-pdf.ts scripts/import-records.ts ./scripts/
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
 
-RUN groupadd --gid 10001 house-ops \
-    && useradd --uid 10001 --gid house-ops --no-create-home --shell /usr/sbin/nologin house-ops
-
-COPY pyproject.toml requirements.lock README.md manage.py ./
-COPY src ./src
-COPY dbt ./dbt
-
-RUN python -m pip install --constraint requirements.lock . \
-    && HOUSE_OPS_SECRET_KEY=collectstatic-build-key \
-       DATABASE_URL=postgresql://unused:unused@localhost/unused \
-       python manage.py collectstatic --noinput
-
-USER 10001:10001
-
+FROM node:24-bookworm-slim AS runtime
+LABEL org.opencontainers.image.source="https://github.com/emilianorios1/house-ops"
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8000 HOSTNAME=0.0.0.0
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+# The same immutable image also runs forward-only migrations and one-time import.
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/prisma.config.ts ./
+COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/src/lib ./src/lib
+COPY --from=build /app/package.json ./
+USER node
 EXPOSE 8000
-
-CMD ["gunicorn", "house_ops.wsgi:application", "--bind=0.0.0.0:8000", \
-     "--workers=2", "--threads=2", "--timeout=60", "--access-logfile=-"]
+CMD ["node", "server.js"]

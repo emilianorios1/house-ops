@@ -1,164 +1,65 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-
-if [[ "$(hostname -s)" != "bordarte" ]]; then
-    echo "Production is VPS-only (bordarte); this laptop is development only." >&2
+if [[ "$(hostname -s)" != bordarte ]]; then
+    echo "Production is VPS-only (bordarte)." >&2
     exit 1
 fi
-
-if (( $# != 1 )); then
-    echo "Usage: $0 <container-image-or-digest>" >&2
+if (( $# != 1 )) || [[ "$1" != *@sha256:* ]]; then
+    echo "Usage: $0 <immutable-image@sha256:digest>" >&2
     exit 2
 fi
-
 image="$1"
-if [[ -z "$image" || "$image" == *$'\n'* || "$image" == *$'\r'* ]]; then
-    echo "Invalid container image" >&2
-    exit 2
-fi
-
+if [[ "$image" == *$'\n'* || "$image" == *$'\r'* ]]; then exit 2; fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
 config_dir="${HOME_LAB_CONFIG_DIR:-${config_home}/home-lab}"
 prod_env="${config_dir}/prod.env"
 deployment_env="${config_dir}/deployment.env"
-previous_env="${config_dir}/deployment.previous.env"
-previous_compose="${config_dir}/compose.production.previous.yaml"
 compose_command="${config_dir}/production-compose.sh"
-lock_file="${config_dir}/deployment.lock"
-
-mkdir -p "$config_dir"
-if [[ ! -f "$prod_env" ]]; then
-    echo "Missing $prod_env; run scripts/install-production.sh first" >&2
+if [[ ! -f "$prod_env" || ! -f "$deployment_env" || ! -x "$compose_command" ]]; then
+    echo "This cutover requires the existing VPS installation. Do not bootstrap over it." >&2
     exit 1
 fi
-
-exec 9>"$lock_file"
-if ! flock -n 9; then
-    echo "Another production deployment is already running" >&2
-    exit 1
+exec 9>"${config_dir}/deployment.lock"
+flock -n 9 || { echo "Deployment already running" >&2; exit 1; }
+# Read-only identification of the active public path and image before any changes.
+curl --fail --silent --show-error https://casa.bordarteuniformes.com.ar/health/ >/dev/null
+web_container="$("$compose_command" ps -q web)"
+if [[ -z "$web_container" ]]; then echo "Existing web container not found" >&2; exit 1; fi
+docker inspect --format 'Active image: {{.Config.Image}}' "$web_container"
+docker network inspect home-lab-prod-frontend --format '{{range .Containers}}{{println .Name}}{{end}}'
+if ! docker inspect --format '{{json .NetworkSettings.Networks}}' "$web_container" | grep -q house-ops-web; then
+    echo "Existing house-ops-web proxy alias not confirmed" >&2; exit 1
 fi
-ensure_env_value() {
-    local key="$1"
-    local value="$2"
-    if ! grep -q "^${key}=" "$prod_env"; then
-        umask 077
-        printf '\n%s=%s\n' "$key" "$value" >> "$prod_env"
-    fi
-}
-
-ensure_env_value HOUSE_OPS_SECRET_KEY \
-    "$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
-ensure_env_value HOUSE_OPS_ALLOWED_HOSTS '*'
-ensure_env_value HOUSE_OPS_ADMIN_USERNAME emiliano
-ensure_env_value HOUSE_OPS_ADMIN_PASSWORD \
-    "$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-ensure_env_value HOUSE_OPS_SECOND_USERNAME vitoria
-ensure_env_value HOUSE_OPS_SECOND_PASSWORD \
-    "$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-
-had_previous=false
-if [[ -f "$deployment_env" ]]; then
-    had_previous=true
-    cp "$deployment_env" "$previous_env"
-    cp "${config_dir}/compose.production.yaml" "$previous_compose"
-    if "$compose_command" ps --status running --services 2>/dev/null | grep -qx postgres; then
-        "${config_dir}/backup-production.sh"
-    fi
-fi
-
-install -m 0644 "$repo_root/compose.production.yaml" \
-    "${config_dir}/compose.production.yaml"
-install -m 0755 "$repo_root/scripts/production-compose.sh" "$compose_command"
-install -m 0755 "$repo_root/scripts/backup-production.sh" \
-    "${config_dir}/backup-production.sh"
-install -m 0755 "$repo_root/scripts/verify-production-backup.sh" \
-    "${config_dir}/verify-production-backup.sh"
-
-umask 077
-new_env="$(mktemp "${config_dir}/deployment.env.XXXXXX")"
-printf 'HOME_LAB_IMAGE=%s\n' "$image" > "$new_env"
-mv "$new_env" "$deployment_env"
-
+"${config_dir}/backup-production.sh"
+"${config_dir}/verify-production-backup.sh"
+cp "$deployment_env" "${config_dir}/deployment.previous.env"
+cp "${config_dir}/compose.production.yaml" "${config_dir}/compose.production.previous.yaml"
 rollback() {
     status=$?
     trap - ERR
-    if [[ "$had_previous" == true && -f "$previous_env" ]]; then
-        echo "Deployment failed; restoring the previously deployed image" >&2
-        cp "$previous_env" "$deployment_env"
-        cp "$previous_compose" "${config_dir}/compose.production.yaml"
-        "$compose_command" up -d --wait --wait-timeout 120 \
-            --remove-orphans || true
-    fi
+    cp "${config_dir}/deployment.previous.env" "$deployment_env"
+    cp "${config_dir}/compose.production.previous.yaml" "${config_dir}/compose.production.yaml"
+    "$compose_command" up -d --wait --wait-timeout 180 --remove-orphans || true
+    echo "Cutover failed; old services restored. Original schemas and PDFs were preserved." >&2
     exit "$status"
 }
 trap rollback ERR
-
+# Stop writers while copying the frozen financial snapshot. Rollback restarts them.
+running_services="$("$compose_command" ps --status running --services)"
+if grep -qx sync-runner <<< "$running_services"; then "$compose_command" stop sync-runner; fi
+"$compose_command" stop web
+install -m 0644 "$repo_root/compose.production.yaml" "${config_dir}/compose.production.yaml"
+umask 077
+printf 'HOME_LAB_IMAGE=%s\n' "$image" > "$deployment_env"
 "$compose_command" config --quiet
-
-if [[ "${HOME_LAB_SKIP_PULL:-0}" != "1" ]]; then
-    "$compose_command" pull postgres web sync-runner migrate
-fi
-
+"$compose_command" pull web migrate
 "$compose_command" up -d --wait --wait-timeout 120 postgres
 "$compose_command" run --rm migrate
-"$compose_command" up -d --wait --wait-timeout 180 --remove-orphans \
-    web sync-runner
-
-env_value() {
-    local key="$1"
-    awk -v key="$key" '
-        index($0, key "=") == 1 { value = substr($0, length(key) + 2) }
-        END { print value }
-    ' "$prod_env"
-}
-production_bind="$(env_value HOME_LAB_PROD_BIND)"
-production_port="$(env_value HOME_LAB_PROD_PORT)"
-web_container="$("$compose_command" ps -q web)"
-running_image="$(docker inspect --format '{{.Config.Image}}' "$web_container")"
-if [[ "$running_image" != "$image" ]]; then
-    echo "House Ops web is using $running_image instead of $image" >&2
-    exit 1
-fi
-runner_container="$("$compose_command" ps -q sync-runner)"
-runner_image="$(docker inspect --format '{{.Config.Image}}' "$runner_container")"
-if [[ "$runner_image" != "$image" ]]; then
-    echo "Sync runner is using $runner_image instead of $image" >&2
-    exit 1
-fi
-
-health_host="${production_bind:-0.0.0.0}"
-if [[ "$health_host" == "0.0.0.0" || "$health_host" == "::" ]]; then
-    health_host="127.0.0.1"
-fi
-curl --fail --silent --show-error \
-    "http://${health_host}:${production_port:-8501}/health/" >/dev/null
-
+"$compose_command" up -d --wait --wait-timeout 180 --remove-orphans web
+curl --fail --silent --show-error https://casa.bordarteuniformes.com.ar/health/ >/dev/null
+running_image="$(docker inspect --format '{{.Config.Image}}' "$("$compose_command" ps -q web)")"
+if [[ "$running_image" != "$image" ]]; then echo "Image mismatch" >&2; exit 1; fi
 trap - ERR
-rm -f "$previous_env" "$previous_compose"
-
-systemd_user_dir="${config_home}/systemd/user"
-if [[ -e "${systemd_user_dir}/home-lab-production.service" ]]; then
-    install -m 0644 \
-        "$repo_root/infra/systemd/home-lab-production.service" \
-        "${config_dir}/home-lab-production.service"
-    install -m 0644 \
-        "$repo_root/infra/systemd/home-lab-backup-verify.service" \
-        "${config_dir}/home-lab-backup-verify.service"
-    install -m 0644 \
-        "$repo_root/infra/systemd/home-lab-backup-verify.timer" \
-        "${config_dir}/home-lab-backup-verify.timer"
-    ln -sfn "${config_dir}/home-lab-backup-verify.service" \
-        "${systemd_user_dir}/home-lab-backup-verify.service"
-    ln -sfn "${config_dir}/home-lab-backup-verify.timer" \
-        "${systemd_user_dir}/home-lab-backup-verify.timer"
-    ln -sfn "${config_dir}/home-lab-production.service" \
-        "${systemd_user_dir}/home-lab-production.service"
-    if systemctl --user daemon-reload 2>/dev/null; then
-        systemctl --user enable --now home-lab-backup-verify.timer
-    else
-        echo "User systemd reload skipped; production containers are already healthy."
-    fi
-fi
-
-echo "House Ops deployed with image $image at ${production_bind:-0.0.0.0}:${production_port:-8501}"
+# Keep previous config for operator rollback. Never restore/drop a database automatically.
+echo "Next.js deployed on the existing VPS and database. Previous config retained for rollback."

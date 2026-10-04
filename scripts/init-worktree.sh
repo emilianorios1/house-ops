@@ -1,108 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-env_file="${repo_root}/.env"
-venv="${repo_root}/.venv"
-
 if [[ ! -f "${repo_root}/.git" ]]; then
-    echo "This command is only for linked Git worktrees" >&2
+    echo "Use a linked Git worktree for development." >&2
     exit 1
 fi
-
-slug="$(
-    basename "$repo_root" \
-        | tr '[:upper:]_' '[:lower:]-' \
-        | tr -cd 'a-z0-9-' \
-        | cut -c1-32
-)"
-if [[ -z "$slug" ]]; then
-    echo "Could not derive a safe name from $repo_root" >&2
-    exit 1
-fi
-
-free_port() {
-    python3 -c \
-        'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
-}
-
-if [[ ! -f "$env_file" ]]; then
-    postgres_port="$(free_port)"
-    web_port="$(free_port)"
-    while [[ "$web_port" == "$postgres_port" ]]; do
-        web_port="$(free_port)"
-    done
-    db_name="home_lab_${slug//-/_}"
-    db_user="$db_name"
-    db_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-    django_secret="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
-    admin_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-    second_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
-
-    umask 077
-    {
-        echo "COMPOSE_PROJECT_NAME=home-lab-wt-${slug}"
-        echo "HOME_LAB_DEV_IMAGE=home-lab-wt-${slug}:dev"
-        echo "HOME_LAB_DEV_POSTGRES_VOLUME=home-lab-wt-${slug}-postgres-data"
-        echo "HOME_LAB_DEV_POSTGRES_PORT=${postgres_port}"
-        echo "HOUSE_OPS_DEV_WEB_PORT=${web_port}"
-        echo "DBT_POSTGRES_HOST=127.0.0.1"
-        echo "DBT_POSTGRES_PORT=${postgres_port}"
-        echo "POSTGRES_DB=${db_name}"
-        echo "POSTGRES_USER=${db_user}"
-        echo "POSTGRES_PASSWORD=${db_password}"
-        echo "HOUSE_OPS_SECRET_KEY=${django_secret}"
-        echo "HOUSE_OPS_DEBUG=true"
-        echo "HOUSE_OPS_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]"
-        echo "HOUSE_OPS_ADMIN_USERNAME=emiliano"
-        echo "HOUSE_OPS_ADMIN_PASSWORD=${admin_password}"
-        echo "HOUSE_OPS_SECOND_USERNAME=vitoria"
-        echo "HOUSE_OPS_SECOND_PASSWORD=${second_password}"
-        echo "DATABASE_URL=postgresql+psycopg://${db_user}:${db_password}@127.0.0.1:${postgres_port}/${db_name}"
-        echo "DOCUMENT_STORE_PATH=data/bronze/gmail"
-        echo "FINANCIAL_STATEMENT_STORE_PATH=data/bronze/financial-statements"
-    } > "$env_file"
-    echo "Created isolated worktree configuration at $env_file"
-else
-    echo "Reusing existing $env_file"
-fi
-
-postgres_port="$(
-    sed -n 's/^HOME_LAB_DEV_POSTGRES_PORT=//p' "$env_file" | tail -n 1
-)"
-if [[ -z "$postgres_port" ]]; then
-    echo "Missing HOME_LAB_DEV_POSTGRES_PORT in $env_file" >&2
-    exit 1
-fi
-if ! grep -q '^DBT_POSTGRES_HOST=' "$env_file"; then
-    echo "DBT_POSTGRES_HOST=127.0.0.1" >> "$env_file"
-fi
-if ! grep -q '^DBT_POSTGRES_PORT=' "$env_file"; then
-    echo "DBT_POSTGRES_PORT=${postgres_port}" >> "$env_file"
-fi
-if ! grep -q '^HOUSE_OPS_SECRET_KEY=' "$env_file"; then
-    echo "HOUSE_OPS_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')" >> "$env_file"
-    echo "HOUSE_OPS_DEBUG=true" >> "$env_file"
-    echo "HOUSE_OPS_ALLOWED_HOSTS=localhost,127.0.0.1,[::1]" >> "$env_file"
-    echo "HOUSE_OPS_ADMIN_USERNAME=emiliano" >> "$env_file"
-    echo "HOUSE_OPS_ADMIN_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> "$env_file"
-    echo "HOUSE_OPS_SECOND_USERNAME=vitoria" >> "$env_file"
-    echo "HOUSE_OPS_SECOND_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> "$env_file"
-fi
-if ! grep -q '^HOUSE_OPS_DEV_WEB_PORT=' "$env_file"; then
-    echo "HOUSE_OPS_DEV_WEB_PORT=$(free_port)" >> "$env_file"
-fi
-
-# Create nested bind-mount targets as the worktree user before Docker can
-# create them as root. The host CLI also writes local document imports here.
-mkdir -p "${repo_root}/data/bronze/gmail" "${repo_root}/secrets"
-chmod 700 "${repo_root}/secrets"
-
-if [[ ! -x "${venv}/bin/python" ]]; then
-    python3 -m venv "$venv"
-fi
-"${venv}/bin/pip" install \
-    --constraint "${repo_root}/requirements.lock" \
-    --editable "${repo_root}[dev]"
-
-echo "Worktree ready. Start it with scripts/dev-up.sh"
+cd "$repo_root"
+npm install
+npm run dev:setup
+echo "Worktree ready. Start it with npm run dev (http://localhost:3000)."

@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model User {
+  id String @id @default(cuid())
+  username String @unique
+  name String
+  passwordHash String
+  active Boolean @default(true)
+  createdAt DateTime @default(now())
+  @@map("shared_users")
+}
+model Document {
+  id String @id @default(cuid())
+  sha256 String @unique
+  filename String
+  storageKey String
+  byteSize Int
+  source String @default("manual")
+  legacyId String? @unique
+  createdAt DateTime @default(now())
+  expenses Expense[]
+  @@map("shared_documents")
+}
+model Expense {
+  id String @id @default(cuid())
+  title String
+  category String
+  dueDate DateTime @db.Date
+  amountCents BigInt
+  extraordinaryCents BigInt @default(0)
+  notes String @default("")
+  documentId String?
+  document Document? @relation(fields: [documentId], references: [id])
+  sourceKey String? @unique
+  archived Boolean @default(false)
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payments Payment[]
+  @@index([dueDate, archived])
+  @@map("shared_expenses")
+}
+model Rent {
+  month String @id
+  grossCents BigInt
+  creditOverrideCents BigInt?
+  creditReason String @default("")
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payments Payment[]
+  @@map("shared_rents")
+}
+model Payment {
+  id String @id @default(cuid())
+  expenseId String?
+  expense Expense? @relation(fields: [expenseId], references: [id])
+  rentMonth String?
+  rent Rent? @relation(fields: [rentMonth], references: [month])
+  payer String
+  amountCents BigInt
+  paidAt DateTime @db.Date
+  notes String @default("")
+  voided Boolean @default(false)
+  sourceKey String? @unique
+  createdAt DateTime @default(now())
+  @@map("shared_payments")
+}
+model Settlement {
+  id String @id @default(cuid())
+  month String
+  from String
+  amountCents BigInt
+  paidAt DateTime @db.Date
+  notes String @default("")
+  voided Boolean @default(false)
+  createdAt DateTime @default(now())
+  @@index([month])
+  @@map("shared_settlements")
+}
+model AuditEvent {
+  id String @id @default(cuid())
+  actor String
+  action String
+  entity String
+  entityId String
+  before Json?
+  after Json?
+  createdAt DateTime @default(now())
+  @@index([createdAt])
+  @@map("shared_audit_events")
+}
+model LoginAttempt {
+  username String @id
+  count Int @default(0)
+  windowStart DateTime @default(now())
+  @@map("shared_login_attempts")
+}

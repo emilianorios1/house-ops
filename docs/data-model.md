@@ -1,97 +1,31 @@
-# Modelo de datos
+# Datos
 
-House Ops usa una arquitectura Bronze/Silver/Gold para Ledger. Bronze conserva las fuentes
-reproducibles, Silver normaliza sus entidades y Gold presenta modelos listos para
-consulta.
+Las tablas nuevas están en `public`, con prefijo `shared_`, sin colisionar con
+Django, Bronze, Silver o Gold.
 
-Los modelos domésticos operacionales viven aparte en el schema `public` y usan
-migraciones Django:
+| Modelo       | Qué conserva                                                                          |
+| ------------ | ------------------------------------------------------------------------------------- |
+| User         | usuario del hogar, nombre, hash de contraseña y estado activo                         |
+| Document     | hash SHA-256 único, nombre original, tamaño, ruta relativa y origen                   |
+| Expense      | nombre, categoría, vencimiento, centavos, extraordinarias, notas, versión y anulación |
+| Rent         | mes, monto acordado, descuento manual opcional con motivo y versión                   |
+| Payment      | importe, fecha, responsable y una obligación (gasto o alquiler)                       |
+| Settlement   | transferencia entre los dos para un mes, fecha, notas y anulación                     |
+| AuditEvent   | actor, acción, registro afectado, valores anteriores/nuevos y fecha                   |
+| LoginAttempt | contador temporal para limitar intentos de ingreso                                    |
 
-- `work_task`: tarea puntual, estado simple, prioridad, vencimiento, asignación,
-  creador y usuario que la completa;
-- `work_routine`: regla recurrente y única próxima fecha;
-- `work_routinecompletion`: historial por ocurrencia programada y usuario;
-- `house_ops_operation_runs`: auditoría de operaciones solicitadas desde la web;
-- tablas nativas de Django para usuarios, sesiones y permisos básicos.
+Un pago tiene exactamente un gasto o un alquiler asociado. No se trata una
+obligación como un pago. El esquema verifica importes positivos, categorías,
+responsables y extraordinarias menores o iguales al total. Sólo las expensas
+pueden tener extraordinarias. El mismo PDF y vencimiento no pueden duplicar un
+gasto activo; distintas cuotas sí pueden compartir el PDF.
 
-No hay FK artificial entre estos modelos y las vistas Gold. Ledger consulta
-Gold/Silver por SQL y no duplica cálculos ni ownership del warehouse.
+Las extraordinarias se aplican al alquiler siguiente según **vencimiento**. Una
+corrección que dejaría el alquiler siguiente por debajo de pagos ya registrados se
+rechaza para que se revisen esos pagos. Un descuento mayor que el alquiler se
+muestra como diferencia a resolver; no se pierde ni se arrastra silenciosamente.
 
-## Tablas y vistas principales
-
-```text
-bronze.gmail_messages
-bronze.gmail_attachments
-bronze.document_parse_results
-bronze.financial_statements
-bronze.mercadopago_statement_movements
-bronze.mercadopago_api_movements
-bronze.mercadopago_account_statements
-bronze.manual_monthly_rents
-bronze.recurring_export_invoice_profile
-
-silver.movements
-silver.documents
-silver.invoices
-silver.invoice_due_dates
-silver.invoice_line_items
-silver.credit_card_transactions
-silver.export_invoices
-
-gold.movements
-gold.bills
-gold.documents
-gold.movement_document_candidates
-gold.credit_card_expenses
-gold.export_invoices
-```
-
-## Obligaciones y movimientos
-
-Una factura es una obligación, no un movimiento realizado. Gold conserva esa
-separación y genera candidatos de conciliación cuando coinciden el importe y una
-ventana razonable alrededor del vencimiento.
-
-Los consumos de tarjeta se publican en `gold.credit_card_expenses` y permanecen
-separados de `gold.movements`. Así se puede analizar cada compra sin duplicar el
-gasto cuando posteriormente se paga el resumen.
-
-Las Facturas E emitidas se normalizan en `silver.export_invoices` y se publican
-en `gold.export_invoices` con su importe original, tipo de cambio histórico y
-equivalente en pesos. No entran en `gold.bills`: son comprobantes de venta, no
-obligaciones del hogar ni prueba de cobro.
-
-`bronze.recurring_export_invoice_profile` mantiene los campos que se repiten
-para un único salario recurrente. Fecha y tipo de cambio quedan fuera del perfil
-para su revisión antes de cada emisión.
-
-El laboratorio WSFEX no persiste sus solicitudes ni respuestas. Las instalaciones
-anteriores pueden conservar `bronze.export_invoice_emissions`; el arranque no la
-elimina ni la modifica, pero la aplicación ya no la utiliza.
-
-Los comprobantes históricos que ya no estén disponibles en su fuente pueden
-registrarse localmente en `bronze.manual_shared_expenses`. Sus valores permanecen
-en PostgreSQL y no se versionan en Git.
-
-El alquiler bruto informado para cada mes se guarda en
-`bronze.manual_monthly_rents`. La carga usa una fila por mes y las correcciones
-actualizan esa misma fila, sin mezclar el importe informado con los movimientos
-que comprueban su pago.
-
-## Validación
-
-Para reconstruir y validar Silver/Gold:
-
-```bash
-.venv/bin/home-lab transform
-```
-
-El flujo ejecuta `dbt build`. Los tests de dbt validan claves, relaciones,
-estados aceptados y que los conceptos de una expensa sumen el importe del primer
-vencimiento.
-
-Los tests de comportamiento Python se ejecutan con:
-
-```bash
-.venv/bin/python -m pytest
-```
+Los importadores usan claves de origen únicas. Un pago histórico sin responsable
+queda `unassigned`: afecta el pendiente del proveedor, pero no se atribuye un
+adelanto. Las evidencias históricas que no pueden convertirse sin inventar datos
+quedan en auditoría para confirmar. El baseline Prisma no altera tablas antiguas.

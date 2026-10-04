@@ -1,163 +1,70 @@
-# Operación
+# Operación y recuperación
 
-## Entornos aislados
+## Desarrollo
 
-| Entorno | Proyecto Compose | Web | PostgreSQL | Persistencia |
-| --- | --- | --- | --- | --- |
-| desarrollo en la laptop | `home-lab-dev` | `127.0.0.1` | host local | volumen y `data/` locales |
-| worktree de desarrollo | `home-lab-wt-<slug>` | puerto aleatorio | puerto aleatorio | volumen y `data/` propios |
-| producción en VPS `bordarte` | `home-lab-prod` | `casa.bordarteuniformes.com.ar` | sólo red interna | volumen histórico y data dir |
+En un worktree aislado: `npm install`, `npm run dev:setup`, `npm run dev`.
+La app está en http://localhost:3000 y el acceso local en
+`.private/local-login.txt`. Se usa `.env.local`, sin sobrescribir `.env`.
+Los PDF están en `data/shared-documents`, excluidos de Git y Docker.
 
-La laptop no es producción. Sus contenedores, puertos, worktrees y datos no
-identifican el VPS, aunque conserven nombres históricos parecidos. El script
-`production-compose.sh` sólo funciona en el host VPS `bordarte`.
+## Corte en el VPS existente
 
-No copies `.env`, OAuth tokens, bases ni documentos entre checkouts.
+1. Validar el PR y confirmar el snapshot existente en `bordarte`, el contenedor
+   web, la imagen activa, Caddy y el alias `house-ops-web:8000`.
+2. Revisar que el propietario configurado de `/data` pueda escribir en
+   `shared-documents` y leer los PDF anteriores. No cambiar credenciales, DNS ni
+   permisos de sudo; se conserva la regla limitada al script de deploy.
+3. Ejecutar explícitamente CI/CD desde `main` con `workflow_dispatch` y aprobación
+   del entorno `production`. El merge por sí solo publica la imagen, no despliega.
+4. El script toma un backup PostgreSQL y comprueba su restauración en un contenedor
+   temporal aislado; detiene Django y el sync-runner durante el corte para que el
+   snapshot de gastos compartidos no cambie mientras se importa.
+5. La migración crea un baseline si hay Django y luego sólo tablas nuevas. El
+   importador copia los PDF con hash verificado, gastos, alquileres configurados,
+   pagos históricos y los dos usuarios. No transforma Gold ni llama servicios.
+6. Si faltan fuentes, PDF, integridad o soporte del hash de una contraseña, el
+   proceso se detiene. No se reemplaza una aplicación con una base vacía. Las
+   filas ya importadas permiten reintentar sin duplicación.
+7. Next.js usa la misma base, volumen, puerto 8000, alias y red frontal. El health
+   local comprueba PostgreSQL y el smoke público comprueba el dominio canónico.
 
-## Worktree
+Las facturas nuevas cargadas sólo en desarrollo no viajan en el PR. El paquete
+privado generado con `npm run export:handoff` debe transferirse por un canal seguro
+al VPS e importarse con `npm run import:records -- /ruta/privada/records.json`
+después del corte, con autorización explícita. No contiene credenciales; no se
+infieren pagos. Confirmar el resultado en el dominio público y preservar el paquete
+hasta verificar las facturas en el nuevo almacenamiento.
 
-```bash
-scripts/init-worktree.sh
-scripts/dev-up.sh
-scripts/dev-up.sh --full
-```
+Si falla durante el corte, el trap devuelve la configuración y la imagen previas
+y reinicia los servicios anteriores. La migración no borra las tablas originales,
+por lo que el rollback de aplicación no requiere restaurar o reescribir la base.
 
-`init-worktree.sh` sólo funciona en un linked worktree. Crea configuración con
-modo privado, venv, puertos y nombres exclusivos. `dev-up.sh` inicia PostgreSQL,
-ejecuta `init-db`, `dbt build`, migrations y bootstrap. `--full` además construye
-la imagen y espera `web` y `sync-runner`.
-
-La laptop no restaura snapshots de producción. Para pruebas locales se usan sus
-datos aislados o fixtures sintéticos; los backups y documentos productivos sólo
-se operan en el VPS.
-
-## Diagnóstico local
-
-```bash
-docker compose --env-file .env ps
-docker compose --env-file .env logs -f --tail=200 web
-docker compose --env-file .env logs -f --tail=200 sync-runner
-curl --fail http://127.0.0.1:PUERTO/health/
-```
-
-## Instalación productiva en el VPS
-
-```bash
-ssh root@2.28.60.154
-cd /opt/house-ops
-scripts/install-production.sh home-lab:local
-```
-
-El instalador crea, sin imprimirlos, database password, Django secret y passwords
-de los dos usuarios. Los guarda en `~/.config/home-lab/prod.env` con modo `0600`.
-No reemplaza un archivo existente.
-
-La topología productiva es:
-
-- `postgres`: volumen `home-lab-prod-postgres-data` ya existente;
-- `web`: Gunicorn read-only, `/data` read-only, redes backend/frontend;
-- `sync-runner`: red backend/egress, secretos y `/data` con escritura;
-- `migrate`: profile efímero para schema, dbt y migraciones;
-- `tools`: CLI efímera para mantenimiento explícito.
-
-Si el VPS ya tiene un Caddy público, no iniciar otro. El servicio `web` publica
-un puerto de diagnóstico sólo en loopback y también ofrece el alias
-`house-ops-web` dentro de `home-lab-prod-frontend`; el Caddy existente puede
-conectarse a esa red y usar `reverse_proxy house-ops-web:8000` para el subdominio
-de House Ops.
-
-La pestaña Operaciones muestra la salida combinada de cada comando del runner
-(hasta los últimos 20.000 caracteres), también cuando la operación falla. Para
-diagnóstico de producción, verificar siempre `https://casa.bordarteuniformes.com.ar`
-y el servicio `sync-runner` que atiende ese despliegue.
-
-## Deploy seguro en el VPS
-
-```bash
-scripts/deploy-production.sh ghcr.io/owner/home-lab@sha256:...
-```
-
-El deploy automático corre en GitHub Actions sobre el runner `vps-production`.
-El runner de la laptop no puede tomar trabajos de producción. En el VPS, el
-workflow invoca `deploy-production.sh` con una regla `sudo` limitada a ese
-script; no requiere ni debe tener sudo general.
-
-Secuencia:
-
-1. toma lock para evitar dos deploys;
-2. agrega sólo configuración House Ops faltante;
-3. si PostgreSQL corre, crea y verifica un dump custom;
-4. conserva imagen y Compose previos para rollback;
-5. valida y obtiene las imágenes;
-6. ejecuta `init-db`, `dbt build`, `migrate` y bootstrap;
-7. reemplaza `web` y `sync-runner` con `--remove-orphans`;
-8. compara la imagen realmente ejecutada;
-9. comprueba `/health/`;
-10. restaura automáticamente el stack previo si algo falla.
-
-Mantener el nombre `home-lab-prod` es intencional: evita crear un volumen vacío y
-perder de vista la base existente durante el cambio de producto.
+Se conservan `deployment.previous.env` y `compose.production.previous.yaml` para
+un rollback de operador. **Después de aceptar escrituras en Next.js**, volver a
+Django exige revisar los cambios nuevos: sus tablas no reciben esas escrituras.
+Nunca restaurar un backup antiguo automáticamente sobre datos recientes.
 
 ## Backups
 
-```bash
-scripts/backup-production.sh
-scripts/verify-production-backup.sh
-```
+El backup PostgreSQL existente sigue incluyendo los esquemas antiguos y nuevos.
+La copia del directorio de documentos debe incluir `/data/shared-documents`
+además de los PDF anteriores: una base sin los archivos no es una recuperación
+completa. `verify-production-backup.sh` verifica la base, no los archivos externos.
+Antes del corte debe estar verificada también la copia duradera del directorio
+de documentos. El PR no cambia ni borra backups ni crea una sincronización externa.
 
-El backup usa formato custom, archivo temporal, validación `pg_restore --list` y
-rename atómico. El timer diario conserva 14 días por defecto; otro timer restaura
-el último dump en un PostgreSQL temporal para verificar recuperabilidad.
+## Vercel
 
-Nunca ejecutar migraciones destructivas contra producción. Las migraciones House
-Ops crean tablas/índices en `public`; no borran schemas financieros ni documentos.
+No se movió el dominio ni la infraestructura a Vercel. La app es Next.js, pero el
+filesystem serverless no es un depósito persistente de facturas. Una migración a
+Vercel debe sustituir el adaptador de archivos por almacenamiento privado durable,
+aprobar la conectividad de PostgreSQL y probar backups y acceso autenticado antes
+de cambiar el DNS. El VPS actual evita esa dependencia adicional.
 
-## Credenciales e integraciones
+## Archivo histórico
 
-Los JSON OAuth viven en `~/.config/home-lab/secrets/`. Los tokens de Mercado Pago,
-SIAT y Afip SDK viven en `prod.env`. Para rotar Afip SDK sin mostrarlo:
-
-```bash
-scripts/set-afip-sdk-access-token.sh
-
-# Abrir Google y volver a autorizar la lectura de Gmail
-scripts/reauthorize-gmail.sh
-
-# Ejecutar ingestas con los mismos datos persistentes de producción
-~/.config/home-lab/production-compose.sh run --rm tools sync-gmail
-~/.config/home-lab/production-compose.sh run --rm tools sync-mercadopago
-~/.config/home-lab/production-compose.sh run --rm tools sync-siat-tgi
-
-# Ver los calendarios y ejecutar un backup ahora
-systemctl --user list-timers home-lab-backup.timer
-systemctl --user list-timers home-lab-backup-verify.timer
-systemctl --user start home-lab-backup.service
-```
-
-El comando de Afip SDK recrea `web`; el runner recibe las otras credenciales
-únicamente desde Compose. Si Google invalida el acceso,
-`scripts/reauthorize-gmail.sh` abre el consentimiento y guarda el token nuevo
-directamente en la ubicación productiva.
-
-Los secretos de Gmail deben copiarse a
-`~/.config/home-lab/secrets/gmail_client_secret.json` y
-`gmail_token.json`. Las demás credenciales se editan únicamente en
-`~/.config/home-lab/prod.env`, cuyo modo debe permanecer en `0600`.
-El token de Afip SDK se rota primero desde el proveedor y luego se carga con
-`scripts/set-afip-sdk-access-token.sh`; no debe pasarse como argumento ni quedar
-en el historial de la terminal.
-
-## Validación de release
-
-```bash
-.venv/bin/python -m pytest
-.venv/bin/home-lab transform
-.venv/bin/python manage.py check
-.venv/bin/python manage.py makemigrations --check --dry-run
-docker compose --env-file .env config
-bash -n scripts/*.sh
-git diff --check
-```
-
-Después del deploy ejecutar Playwright contra la URL productiva y verificar
-`docker compose ps`, `/health/`, navegación autenticada y ausencia de HTTP 500.
+Los módulos Python, Django, dbt y sus tests se conservan como archivo de la fuente
+anterior. No entran al Dockerfile ni a los comandos nuevos de desarrollo y deploy.
+Los documentos de integraciones anteriores son referencia histórica, no pasos
+necesarios para usar la app nueva. No ejecutar autenticaciones ni sincronizaciones
+antiguas como parte de esta migración.
