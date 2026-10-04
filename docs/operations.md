@@ -30,10 +30,24 @@ Los PDF están en `data/shared-documents`, excluidos de Git y Docker.
 
 Las facturas nuevas cargadas sólo en desarrollo no viajan en el PR. El paquete
 privado generado con `npm run export:handoff` debe transferirse por un canal seguro
-al VPS e importarse con `npm run import:records -- /ruta/privada/records.json`
+al VPS e importarse con `node --import tsx scripts/import-handoff.ts /ruta/privada/records.json`
 después del corte, con autorización explícita. No contiene credenciales; no se
-infieren pagos. Confirmar el resultado en el dominio público y preservar el paquete
+infieren pagos: se trasladan los que ya están registrados, sin atribuir los pagos
+de responsable desconocido. El importador verifica hashes, concilia fuentes antiguas,
+rechaza diferencias financieras sin reescribirlas y admite reintentos sin duplicación.
+Confirmar el resultado en el dominio público y preservar el paquete
 hasta verificar las facturas en el nuevo almacenamiento.
+
+El workflow manual usa `operation=preflight` para diagnóstico de lectura y
+`operation=deploy` para un corte autorizado. Para trasladar datos en ese corte,
+se puede comprimir el paquete, dividir su base64 en secretos temporales
+`HOUSE_OPS_HANDOFF_01` a `HOUSE_OPS_HANDOFF_20` (hasta 40.000 caracteres por parte)
+y proporcionar `handoff_sha256` del archivo comprimido. La recepción verifica
+hash, tamaños y rutas antes de extraer. Los contenidos nunca aparecen en Git ni
+logs; los temporales del runner y del contenedor se retiran al terminar. El operador
+debe retirar también esos secretos de GitHub después de verificar la importación.
+No incluir credenciales en el paquete. Las credenciales originales del VPS siguen
+vigentes; el smoke comprueba ingreso con ellas y los PDFs autenticados del dominio.
 
 Si falla durante el corte, el trap devuelve la configuración y la imagen previas
 y reinicia los servicios anteriores. La migración no borra las tablas originales,
@@ -50,6 +64,8 @@ El backup PostgreSQL existente sigue incluyendo los esquemas antiguos y nuevos.
 La copia del directorio de documentos debe incluir `/data/shared-documents`
 además de los PDF anteriores: una base sin los archivos no es una recuperación
 completa. `verify-production-backup.sh` verifica la base, no los archivos externos.
+El corte congela los escritores y agrega una copia `.documents.tar.gz`, comparada
+con los documentos originales y verificada por SHA-256, junto al backup de la base.
 Antes del corte debe estar verificada también la copia duradera del directorio
 de documentos. El PR no cambia ni borra backups ni crea una sincronización externa.
 

@@ -31,24 +31,33 @@ docker network inspect home-lab-prod-frontend --format '{{range .Containers}}{{p
 if ! docker inspect --format '{{json .NetworkSettings.Networks}}' "$web_container" | grep -q house-ops-web; then
     echo "Existing house-ops-web proxy alias not confirmed" >&2; exit 1
 fi
-"${config_dir}/backup-production.sh"
-"${config_dir}/verify-production-backup.sh"
 cp "$deployment_env" "${config_dir}/deployment.previous.env"
 cp "${config_dir}/compose.production.yaml" "${config_dir}/compose.production.previous.yaml"
 rollback() {
     status=$?
-    trap - ERR
+    trap - ERR EXIT
     cp "${config_dir}/deployment.previous.env" "$deployment_env"
     cp "${config_dir}/compose.production.previous.yaml" "${config_dir}/compose.production.yaml"
     "$compose_command" up -d --wait --wait-timeout 180 --remove-orphans || true
     echo "Cutover failed; old services restored. Original schemas and PDFs were preserved." >&2
     exit "$status"
 }
-trap rollback ERR
+trap rollback ERR EXIT
 # Stop writers while copying the frozen financial snapshot. Rollback restarts them.
 running_services="$("$compose_command" ps --status running --services)"
 if grep -qx sync-runner <<< "$running_services"; then "$compose_command" stop sync-runner; fi
 "$compose_command" stop web
+# Back up the frozen database and original external documents before migration.
+database_backup="$(HOUSE_OPS_SKIP_BACKUP_PRUNE=1 "$repo_root/scripts/backup-production.sh")"
+"$repo_root/scripts/verify-production-backup.sh" "$database_backup"
+data_dir="$(awk 'index($0,"HOME_LAB_PROD_DATA_DIR=")==1{value=substr($0,length("HOME_LAB_PROD_DATA_DIR=")+1)}END{print value}' "$prod_env")"
+[[ -d "$data_dir" ]] || { echo "Original document directory missing" >&2; exit 1; }
+document_backup="${database_backup}.documents.tar.gz"
+tar --create --gzip --file "$document_backup" --directory "$data_dir" .
+tar --compare --gzip --file "$document_backup" --directory "$data_dir"
+sha256sum "$document_backup" > "${document_backup}.sha256"
+sha256sum --check --status "${document_backup}.sha256"
+echo "Frozen database restore and external document backup verified."
 install -m 0644 "$repo_root/compose.production.yaml" "${config_dir}/compose.production.yaml"
 umask 077
 printf 'HOME_LAB_IMAGE=%s\n' "$image" > "$deployment_env"
@@ -57,9 +66,11 @@ printf 'HOME_LAB_IMAGE=%s\n' "$image" > "$deployment_env"
 "$compose_command" up -d --wait --wait-timeout 120 postgres
 "$compose_command" run --rm migrate
 "$compose_command" up -d --wait --wait-timeout 180 --remove-orphans web
-curl --fail --silent --show-error https://casa.bordarteuniformes.com.ar/health/ >/dev/null
+curl --fail --silent --show-error --location https://casa.bordarteuniformes.com.ar/health/ >/dev/null
 running_image="$(docker inspect --format '{{.Config.Image}}' "$("$compose_command" ps -q web)")"
 if [[ "$running_image" != "$image" ]]; then echo "Image mismatch" >&2; exit 1; fi
-trap - ERR
+admin_password="$(awk 'index($0,"HOUSE_OPS_ADMIN_PASSWORD=")==1{value=substr($0,length("HOUSE_OPS_ADMIN_PASSWORD=")+1)}END{print value}' "$prod_env")"
+docker exec -e HOUSE_OPS_ADMIN_PASSWORD="$admin_password" "$("$compose_command" ps -q web)" node scripts/smoke-production.mjs
+trap - ERR EXIT
 # Keep previous config for operator rollback. Never restore/drop a database automatically.
 echo "Next.js deployed on the existing VPS and database. Previous config retained for rollback."

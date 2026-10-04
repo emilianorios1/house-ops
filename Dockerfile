@@ -11,7 +11,7 @@ COPY src/app ./src/app
 COPY src/auth.ts ./src/auth.ts
 COPY src/components ./src/components
 COPY src/lib ./src/lib
-COPY scripts/migrate.ts scripts/seed.ts scripts/import-legacy.ts scripts/import-pdf.ts scripts/import-records.ts ./scripts/
+COPY scripts/migrate.ts scripts/seed.ts scripts/import-legacy.ts scripts/import-pdf.ts scripts/import-records.ts scripts/import-handoff.ts scripts/smoke-production.mjs ./scripts/
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

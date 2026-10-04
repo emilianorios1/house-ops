@@ -15,7 +15,19 @@ proxy="$(docker ps -q --filter ancestor=caddy:2)"
 if [[ -z "$proxy" ]]; then proxy="$(docker ps --format '{{.ID}} {{.Image}}' | awk '$2 ~ /^caddy:/ { print $1; exit }')"; fi
 [[ -n "$proxy" ]] || { echo "Active Caddy proxy not found" >&2; exit 1; }
 docker inspect --format 'Proxy image: {{.Config.Image}}; networks: {{range $name,$network := .NetworkSettings.Networks}}{{$name}} {{end}}' "$proxy"
-docker exec "$proxy" cat /etc/caddy/Caddyfile | awk '/casa\.bordarteuniformes\.com\.ar/{found=1} found{print} found && /^}/{exit}'
+docker exec "$proxy" caddy adapt --config /etc/caddy/Caddyfile --pretty 2>/dev/null | python3 -c '
+import json,sys
+def objects(value):
+    if isinstance(value,dict):
+        yield value
+        for child in value.values(): yield from objects(child)
+    elif isinstance(value,list):
+        for child in value: yield from objects(child)
+routes=[node for node in objects(json.load(sys.stdin)) if any("casa.bordarteuniformes.com.ar" in match.get("host",[]) for match in node.get("match",[]) if isinstance(match,dict))]
+upstreams={upstream.get("dial") for route in routes for node in objects(route) for upstream in node.get("upstreams",[]) if isinstance(upstream,dict)}
+if "house-ops-web:8000" not in upstreams: raise SystemExit("Canonical Caddy route not confirmed")
+print("Verified Caddy route: casa.bordarteuniformes.com.ar -> house-ops-web:8000")
+'
 config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
 config_dir="${HOME_LAB_CONFIG_DIR:-${config_home}/home-lab}"
 if [[ -x "${config_dir}/production-compose.sh" ]]; then

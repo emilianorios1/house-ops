@@ -77,8 +77,10 @@ sin comprobante hasta que se pueda adjuntar el archivo.
 
 `npm run export:handoff` prepara `.private/household-handoff/records.json` y sus
 PDF para trasladar las cargas asistidas al VPS después de aprobar el corte. Ese
-paquete contiene datos privados y se transfiere por separado del PR; nunca entra
-a Git ni a la imagen. `import:records` resuelve las rutas de los PDF respecto del
+paquete contiene datos privados, TGI y pagos registrados y se transfiere por separado del PR; nunca entra
+a Git ni a la imagen. `node --import tsx scripts/import-handoff.ts records.json`
+concilia el paquete sin duplicar fuentes anteriores ni sobrescribir diferencias
+financieras. `import:records` resuelve las rutas de los PDF respecto del
 manifiesto, para que el paquete se pueda trasladar sin rutas de esta laptop.
 
 ## Validación

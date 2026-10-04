@@ -60,8 +60,10 @@ fi
 mv "$temporary_path" "$final_path"
 trap - EXIT
 
+if [[ "${HOUSE_OPS_SKIP_BACKUP_PRUNE:-0}" != 1 ]]; then
 find "$backup_dir" -maxdepth 1 -type f \
     -name 'home-lab-prod-????????T??????Z.dump' \
     -mtime "+${retention_days}" -delete
+fi
 
 echo "$final_path"
