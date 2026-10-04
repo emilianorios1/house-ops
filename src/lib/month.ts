@@ -9,6 +9,7 @@ export async function getMonth(month: string) {
     db.expense.findMany({
       where: {
         archived: false,
+        category: { not: "Internet" },
         dueDate: { gte: new Date(`${month}-01`), lt: new Date(`${end}-01`) },
       },
       include: { document: true, payments: true },

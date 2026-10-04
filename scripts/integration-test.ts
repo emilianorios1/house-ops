@@ -68,6 +68,9 @@ async function main() {
       "INSERT INTO gold.shared_expense_items VALUES ('Expensas',1,1,1,'2026-09-14','2026-09-01',150,150,'2026-09-13','Synthetic','paid')",
     );
     await db.$executeRawUnsafe(
+      "INSERT INTO gold.shared_expense_items VALUES ('Internet',2,NULL,1,'2026-09-16','2026-09-01',80,0,NULL,'Synthetic','unpaid')",
+    );
+    await db.$executeRawUnsafe(
       "CREATE TABLE bronze.manual_monthly_rents (summary_month date,gross_amount numeric)",
     );
     await db.$executeRawUnsafe(
@@ -82,7 +85,13 @@ async function main() {
     run("scripts/migrate.ts");
     run("scripts/import-legacy.ts");
     run("scripts/import-legacy.ts");
-    assert.equal(await db.expense.count(), 1);
+    assert.equal(await db.expense.count(), 2);
+    assert.equal(await db.expense.count({ where: { archived: false } }), 1);
+    const internet = await db.expense.findFirstOrThrow({
+      where: { category: "Internet" },
+    });
+    assert.equal(internet.archived, true);
+    assert.equal(internet.amountCents, 8000n);
     assert.equal(await db.document.count(), 1);
     assert.equal(await db.payment.count(), 2);
     assert.equal(await db.rent.count(), 1);
@@ -90,7 +99,9 @@ async function main() {
       where: { username: "emiliano" },
     });
     assert(verifyPassword("synthetic-password", user.passwordHash));
-    const expense = await db.expense.findFirstOrThrow();
+    const expense = await db.expense.findFirstOrThrow({
+      where: { category: "Expensas" },
+    });
     assert.equal(expense.extraordinaryCents, 5000n);
     assert.equal(expense.amountCents, 15000n);
     assert(
@@ -99,7 +110,7 @@ async function main() {
     const [{ count }] = await db.$queryRaw<
       { count: bigint }[]
     >`SELECT count(*) FROM gold.shared_expense_items`;
-    assert.equal(count, 1n);
+    assert.equal(count, 2n);
     const event = await db.auditEvent.findFirstOrThrow();
     await assert.rejects(() =>
       db.auditEvent.update({

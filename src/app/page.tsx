@@ -12,7 +12,6 @@ import {
   Lightbulb,
   Flame,
   Droplets,
-  Wifi,
   Landmark,
 } from "lucide-react";
 import { Shell } from "@/components/shell";
@@ -24,7 +23,6 @@ const icons: Record<string, typeof Receipt> = {
   Luz: Lightbulb,
   Agua: Droplets,
   Gas: Flame,
-  Internet: Wifi,
   TGI: Landmark,
 };
 export default async function MonthPage({
@@ -41,7 +39,7 @@ export default async function MonthPage({
     rent?.payments
       .filter((p) => !p.voided)
       .reduce((n, p) => n + p.amountCents, 0n) ?? 0n;
-  const hasMissing = ["Expensas", "Luz", "Agua", "Gas", "Internet"].filter(
+  const hasMissing = ["Expensas", "Luz", "Agua", "Gas"].filter(
     (c) => !bills.some((b) => b.category === c),
   );
   const who =

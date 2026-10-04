@@ -7,6 +7,9 @@ Gmail, Mercado Pago, un runner de sincronización ni un proveedor de IA para fun
 
 ## Cómo se reparten los gastos
 
+- Internet es un gasto personal de Emiliano y queda fuera del reparto. No aparece
+  como categoría para cargar ni como servicio pendiente. Los registros anteriores
+  se conservan para auditoría, sin sumarlos a las cuentas compartidas.
 - Cada factura entra **en el mes de su vencimiento**, aunque el período impreso
   sea anterior. Dos cuotas con vencimientos distintos son dos gastos y pueden
   compartir el mismo PDF. Un segundo vencimiento con recargo es una alternativa,

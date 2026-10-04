@@ -66,7 +66,6 @@ export const categories = [
   "Agua",
   "Gas",
   "TGI",
-  "Internet",
   "Otros",
 ] as const;
 export const people = ["emiliano", "vitoria"] as const;

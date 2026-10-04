@@ -8,7 +8,7 @@ export default async function HistoryPage() {
   const user = await requireUser();
   const [bills, rents] = await Promise.all([
     db.expense.findMany({
-      where: { archived: false },
+      where: { archived: false, category: { not: "Internet" } },
       select: { dueDate: true },
     }),
     db.rent.findMany({ select: { month: true } }),

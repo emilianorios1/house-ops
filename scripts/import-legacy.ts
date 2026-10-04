@@ -166,6 +166,8 @@ async function main() {
         data: {
           title: `${item.category} · ${item.issuer}`,
           category: item.category,
+          // Internet is personal; retain its source without adding it to the split.
+          archived: item.category === "Internet",
           dueDate,
           amountCents,
           extraordinaryCents,
