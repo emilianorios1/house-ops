@@ -11,7 +11,8 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   verify:
-    name: TypeScript, expenses, migration and browser
+    # Preserve the required main-branch check context; verification now uses Next.js.
+    name: Tests, dbt and image
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
