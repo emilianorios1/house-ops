@@ -8,7 +8,13 @@ import { PrismaClient } from "@prisma/client";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createHash } from "node:crypto";
+import {
+  createHash,
+  generateKeyPairSync,
+  privateDecrypt,
+  constants,
+  createDecipheriv,
+} from "node:crypto";
 import assert from "node:assert/strict";
 import { syntheticPdf } from "../tests-next/helpers";
 import { calculateMonth } from "../src/lib/calculation";
@@ -104,6 +110,63 @@ async function main() {
     assert.equal(await db.payment.count(), 1);
     assert.equal(await db.document.count(), 1);
     assert.equal(await db.rent.count(), 1);
+    const user = await db.user.create({
+      data: {
+        username: "emiliano",
+        name: "Synthetic user",
+        passwordHash: "synthetic-unused-hash",
+      },
+    });
+    const pair = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    });
+    const sessionResult = spawnSync(
+      process.execPath,
+      ["scripts/create-upload-session.mjs"],
+      {
+        env: {
+          ...env,
+          AUTH_SECRET: "synthetic-secret-at-least-32-characters",
+          UPLOAD_PUBLIC_KEY: pair.publicKey,
+        },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(sessionResult.status, 0);
+    const envelope = JSON.parse(sessionResult.stdout);
+    const encryptionKey = privateDecrypt(
+      {
+        key: pair.privateKey,
+        padding: constants.RSA_PKCS1_OAEP_PADDING,
+        oaepHash: "sha256",
+      },
+      Buffer.from(envelope.key, "base64"),
+    );
+    const cipher = createDecipheriv(
+      "aes-256-gcm",
+      encryptionKey,
+      Buffer.from(envelope.iv, "base64"),
+    );
+    cipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
+    const session = JSON.parse(
+      Buffer.concat([
+        cipher.update(Buffer.from(envelope.payload, "base64")),
+        cipher.final(),
+      ]).toString("utf8"),
+    );
+    assert.equal(session.origin, "https://casa.bordarteuniformes.com.ar");
+    assert.equal(session.cookie, "__Secure-authjs.session-token");
+    assert.ok(session.expiresAt <= Date.now() + 900000);
+    const { decode } = await import("@auth/core/jwt");
+    const claims = await decode({
+      token: session.token,
+      secret: "synthetic-secret-at-least-32-characters",
+      salt: session.cookie,
+    });
+    assert.equal(claims?.sub, user.id);
+    assert.equal(claims?.username, "emiliano");
     const bills = await db.expense.findMany({ include: { payments: true } });
     const result = calculateMonth(bills, [], null, []);
     assert.equal(result.total, 23000n);

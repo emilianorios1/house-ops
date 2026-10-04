@@ -39,8 +39,17 @@ Confirmar el resultado en el dominio público y preservar el paquete
 hasta verificar las facturas en el nuevo almacenamiento.
 
 El workflow manual usa `operation=preflight` para diagnóstico de lectura y
-`operation=deploy` para un corte autorizado. Para trasladar datos en ese corte,
-se puede comprimir el paquete, dividir su base64 en secretos temporales
+`operation=deploy` para un corte autorizado. Los PDFs se pueden cargar después
+por `/api/documents` usando una sesión autenticada. `operation=upload-session`,
+con una clave RSA pública del operador, entrega una sesión de 15 minutos en un
+artefacto cifrado RSA-OAEP + AES-GCM; la clave privada queda en la computadora
+del operador. No cambia contraseñas ni expone la sesión en los logs. Sólo corre
+en `main` y el entorno protegido `production`.
+
+Para los metadatos, el paquete puede omitir `pdf` y conservar `sha256` después de
+subir/verificar esos originales. El importador exige que el documento ya exista
+con ese hash. Usar `operation=handoff` para recibir/importar el paquete privado:
+se puede comprimir el JSON, dividir su base64 en secretos temporales
 `HOUSE_OPS_HANDOFF_01` a `HOUSE_OPS_HANDOFF_20` (hasta 40.000 caracteres por parte)
 y proporcionar `handoff_sha256` del archivo comprimido. La recepción verifica
 hash, tamaños y rutas antes de extraer. Los contenidos nunca aparecen en Git ni

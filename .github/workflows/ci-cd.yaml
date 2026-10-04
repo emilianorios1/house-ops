@@ -8,10 +8,14 @@ on:
       operation:
         description: "Read-only readiness or approved deployment"
         type: choice
-        options: [preflight, deploy]
+        options: [preflight, deploy, upload-session, handoff]
         default: preflight
       handoff_sha256:
         description: "SHA-256 of the optional private household bundle"
+        type: string
+        required: false
+      upload_public_key:
+        description: "Public RSA key for an encrypted temporary upload session"
         type: string
         required: false
 permissions:
@@ -121,8 +125,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: sudo -n ./scripts/deploy-production.sh '${{ needs.publish.outputs.image }}@${{ needs.publish.outputs.digest }}'
+  upload-session:
+    name: Encrypted temporary upload session
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'upload-session'
+    runs-on: [self-hosted, linux, x64, vps-production]
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - name: Create encrypted envelope inside the existing app
+        env:
+          UPLOAD_PUBLIC_KEY: ${{ inputs.upload_public_key }}
+        run: |
+          test "$(hostname -s)" = bordarte
+          web="$(docker ps -q --filter label=com.docker.compose.project=home-lab-prod --filter label=com.docker.compose.service=web)"
+          test -n "$web"
+          umask 077
+          docker exec -e UPLOAD_PUBLIC_KEY "$web" node scripts/create-upload-session.mjs > "$RUNNER_TEMP/casa-upload-session.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: casa-upload-session-${{ github.run_id }}
+          path: ${{ runner.temp }}/casa-upload-session.json
+          retention-days: 1
+      - name: Remove encrypted staging envelope
+        if: always()
+        run: rm -f -- "$RUNNER_TEMP/casa-upload-session.json"
+  handoff:
+    name: Load explicitly supplied household records
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'handoff'
+    runs-on: [self-hosted, linux, x64, vps-production]
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Receive private household bundle
-        if: inputs.handoff_sha256 != ''
         env:
           HANDOFF_SHA256: ${{ inputs.handoff_sha256 }}
           HOUSE_OPS_HANDOFF_01: ${{ secrets.HOUSE_OPS_HANDOFF_01 }}
@@ -147,7 +182,6 @@ jobs:
           HOUSE_OPS_HANDOFF_20: ${{ secrets.HOUSE_OPS_HANDOFF_20 }}
         run: python3 scripts/receive-handoff.py "$RUNNER_TEMP/casa-handoff-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
       - name: Load household records and verify public PDFs
-        if: inputs.handoff_sha256 != ''
         run: bash scripts/load-production-handoff.sh "$RUNNER_TEMP/casa-handoff-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
       - name: Remove private staging files
         if: always() && inputs.handoff_sha256 != ''

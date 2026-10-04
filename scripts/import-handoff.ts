@@ -93,7 +93,15 @@ async function main() {
     throw Error("Repeated source keys");
   const documents = new Map<string, string>();
   for (const r of data.expenses) {
-    if (!r.pdf) continue;
+    if (!r.pdf) {
+      if (r.sha256) {
+        const doc = await db.document.findUniqueOrThrow({
+          where: { sha256: r.sha256 },
+        });
+        documents.set(r.sourceKey, doc.id);
+      }
+      continue;
+    }
     const path = resolve(dirname(file), r.pdf);
     if (!path.startsWith(dirname(file) + sep) || !r.sha256)
       throw Error("Document path or hash missing");
