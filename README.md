@@ -10,6 +10,8 @@ Gmail, Mercado Pago, un runner de sincronización ni un proveedor de IA para fun
 - Internet es un gasto personal de Emiliano y queda fuera del reparto. No aparece
   como categoría para cargar ni como servicio pendiente. Los registros anteriores
   se conservan para auditoría, sin sumarlos a las cuentas compartidas.
+- TGI también se comparte. Si falta el PDF, se puede cargar el importe y
+  vencimiento confirmados por el usuario, un correo o una captura del proveedor.
 - Cada factura entra **en el mes de su vencimiento**, aunque el período impreso
   sea anterior. Dos cuotas con vencimientos distintos son dos gastos y pueden
   compartir el mismo PDF. Un segundo vencimiento con recargo es una alternativa,

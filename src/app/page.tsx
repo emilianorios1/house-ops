@@ -39,7 +39,7 @@ export default async function MonthPage({
     rent?.payments
       .filter((p) => !p.voided)
       .reduce((n, p) => n + p.amountCents, 0n) ?? 0n;
-  const hasMissing = ["Expensas", "Luz", "Agua", "Gas"].filter(
+  const hasMissing = ["Expensas", "Luz", "Agua", "Gas", "TGI"].filter(
     (c) => !bills.some((b) => b.category === c),
   );
   const who =
