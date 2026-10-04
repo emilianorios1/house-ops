@@ -1,0 +1,2 @@
+-- Empty baseline: the existing Django/Bronze/Silver/Gold tables stay untouched.
+-- The importer uses a frozen legacy snapshot; the new runtime never queries dbt.

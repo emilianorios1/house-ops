@@ -41,15 +41,15 @@ toma las decisiones técnicas normales.
 
 ### Criterio de producto
 
-House Ops debe funcionar como una memoria externa simple para la vida compartida:
-lo que necesita atención hoy, tareas, rutinas recurrentes, recordatorios,
-documentos y finanzas del hogar. Antes de crear un módulo nuevo, revisar si una
-Task, Routine, documento o pantalla existente ya resuelve la necesidad.
+Casa es una app para los gastos compartidos de Emiliano y Vitoria: facturas,
+vencimientos, alquiler, pagos, reparto mensual e historial auditable. Antes de
+crear un módulo, revisar si un gasto, pago, transferencia o comprobante existente
+resuelve la necesidad. No reincorporar tareas, rutinas, finanzas personales ni
+sincronizaciones automáticas sin un pedido explícito.
 
 La interfaz debe priorizar lenguaje cotidiano, pocos pasos, controles grandes,
 uso desde el celular y una acción principal clara. Vitoria decide si algo es
-fácil de entender; Codex decide cómo implementarlo sin agregar complejidad
-innecesaria.
+fácil de entender; Codex implementa sin agregar complejidad innecesaria.
 
 ### Flujo de cada cambio
 
@@ -70,10 +70,10 @@ credenciales ni borrar o reescribir datos sin una autorización explícita.
 
 ## Purpose and sources of truth
 
-`House Ops` is a local Django application for household work, recurring routines,
-personal financial activity, and documents. It normalizes financial sources in
-PostgreSQL with dbt and serves a responsive server-rendered UI. It uses Python
-3.12, Django 5.2, PostgreSQL 17, dbt, and a Bronze/Silver/Gold architecture.
+`House Ops` / Casa is a Next.js + TypeScript application for shared household
+expenses. It uses PostgreSQL 17, Prisma, Zod, Auth.js and Tailwind. The previous
+Django, Python and dbt code is retained as a historical migration/rollback source,
+not as a dependency of the new runtime.
 
 - Use `README.md` for the detailed domain model, setup, and operator workflows.
 - Treat the implementation and tests as the source of truth when documentation
@@ -106,110 +106,88 @@ PostgreSQL with dbt and serves a responsive server-rendered UI. It uses Python
 
 ## Architecture invariants
 
-- Bronze preserves reproducible source records, ingestion metadata, stored
-  documents, and versioned parser results. Do not hide destructive
-  transformations inside Bronze ingestion.
-- Silver normalizes movements, documents, invoices, due dates, line items, and
-  credit-card transactions. Gold exposes query-ready movements, bills,
-  documents, reconciliation candidates, card expenses, and shared expenses.
-- A bill is an obligation, not a completed movement. Keep obligations and
-  payments separate and reconcile them explicitly.
-- PDF and statement files live in content-addressed storage outside PostgreSQL.
-  The database stores paths, hashes, sizes, and traceability; do not put binary
-  document contents in database tables.
-- Imports and synchronization flows must remain idempotent. Preserve the current
-  deduplication keys and source lineage when extending them.
-- Ledger reporting pages are read-only. Keep financial writes limited to explicit
-  data-entry or maintenance interfaces and persist them in Bronze.
-- Keep the legacy `raw` compatibility path working unless a task explicitly
-  includes a migration and removal plan.
-- External document downloads must remain restricted to trusted source
-  endpoints, validate the response as a PDF, and enforce the configured size
-  limit.
+- Expenses are obligations, not payments. Supplier payments and transfers between
+  the two household members remain separate and are explicitly recorded.
+- Assign an expense to its due-date month, not its statement period. Extraordinary
+  condominium expenses credit the next month's rent; no extraordinary expenses
+  means no credit. Do not invent an agreed rent from banking movements.
+- Calculate money in integer cents. Preserve every cent when splitting 50/50.
+- PDF files live in content-addressed storage outside PostgreSQL. The database
+  stores paths, hashes, sizes and traceability, never document binary contents.
+- Imports are idempotent and preserve source lineage. Never infer who paid from
+  an invoice alone. Imported payments with no verified payer stay unassigned.
+- Explicit edits, payments and voids share a transaction with append-only audit.
+  Do not silently overwrite concurrent changes or erase audit history.
+- The new runtime writes public.shared\_\* tables. Legacy Bronze/Silver/Gold/raw
+  tables and original documents stay untouched during migration and rollback.
+  Do not run dbt, synchronization or authentication as part of normal startup.
+- External downloads must remain restricted to trusted source endpoints, validate
+  the response as a PDF and enforce the size limit. The web never fetches URLs
+  submitted through a financial form.
+- Never package credentials, invoices, .private, data or old financial archives
+  into Git, screenshots, logs or container images.
 
 ## Repository map
 
-- `src/home_lab/cli.py`: CLI entry point and workflow orchestration.
-- `src/home_lab/config.py`: environment-backed runtime configuration.
-- `src/home_lab/database.py`: Bronze schema creation and compatibility migration.
-- `src/home_lab/gmail/`: read-only Gmail client, Bronze repository, and pipeline.
-- `src/home_lab/mercadopago/`: Reports API client, import/storage, and pipeline.
-- `src/home_lab/siat/`: Rosario TGI client and pipeline.
-- `src/home_lab/documents/`: PDF validation, content-addressed storage, parser
-  registry, and source-specific parsers.
-- `src/house_ops/work/`: Home, tasks, routines, completion history, and auth-aware
-  operational workflows.
-- `src/house_ops/ledger/`: Django Ledger/documents/operations views plus SQL
-  repositories over Gold/Silver and the operation audit model.
-- `src/house_ops/templates/` and `static/`: Bootstrap/HTMX server-rendered UI.
-- `dbt/models/silver/`: normalization models.
-- `dbt/models/gold/`: reporting and reconciliation models.
-- `dbt/tests/` and model `schema.yml` files: dbt data-quality assertions.
-- `tests/`: pytest unit and integration-style tests using local fakes/fixtures.
-- `scripts/`: local development, deployment, backup, and maintenance commands.
+- `src/app/`: protected pages, Server Actions and API routes.
+- `src/components/`: reusable forms and responsive navigation.
+- `src/lib/calculation.ts`, `money.ts`, `month.ts`: monthly sharing and exact cents.
+- `src/lib/documents.ts`: PDF validation, compatible expense extraction and storage.
+- `src/auth.ts`, `src/lib/session.ts`, `password.ts`: household authentication.
+- `prisma/schema.prisma`, `prisma/migrations/`: additive data model and constraints.
+- `scripts/import-legacy.ts`: one-time read of the frozen legacy financial snapshot.
+- `scripts/import-pdf.ts`, `import-records.ts`: assisted private document imports.
+- `scripts/local-setup.ts`, `migrate.ts`, `seed.ts`: isolated local startup.
+- `tests-next/`, `scripts/integration-test.ts`, `browser-tests.ts`: domain, database
+  migration and desktop/mobile verification with synthetic isolated databases.
+- `scripts/deploy-production.sh`, Compose and CI: explicit VPS cutover and rollback.
+- `src/home_lab/`, `src/house_ops/`, `dbt/`, `tests/`: preserved historical Python
+  source and tests. Modify only when the requested work includes legacy behavior.
 
 ## Change guidelines
 
-- Inspect the relevant implementation, tests, and README section before editing.
-  Prefer the smallest coherent change that satisfies the task.
-- Keep HTTP clients, persistence, parsing, and orchestration separated according
-  to the existing source-specific package structure. Avoid adding generic
-  catch-all modules.
-- Do not make live Gmail, Mercado Pago, or SIAT calls from automated tests. Use
-  fakes or fixtures and test trust boundaries, malformed responses, and retries
-  where relevant.
-- When adding or changing a document parser, update the parser registry and add
-  focused tests for both a supported document and an unrelated or invalid one.
-  Preserve parser name/version traceability.
-- When changing database structures, use forward-compatible, repeatable schema
-  creation or migration. Do not drop or rewrite user data as a side effect of
-  normal startup.
-- When changing dbt models, preserve Bronze lineage, add or update schema/data
-  tests, and check downstream Gold queries and House Ops expectations.
-- When changing behavior or operator commands, update `README.md` in the same
-  change.
-- Add production dependencies only when the standard library and existing
-  dependencies do not reasonably cover the requirement.
+- Inspect the relevant implementation, tests and README before editing. Prefer the
+  smallest coherent change that satisfies the household flow.
+- Keep parsing, storage, calculations, authentication and orchestration separate.
+  Avoid generic catch-all packages and unnecessary production dependencies.
+- Validate financial inputs with Zod and database constraints. Add focused tests
+  for money/date rules, malformed documents, authentication and duplicate imports.
+- Automated tests use synthetic fixtures and isolated local databases, never live
+  Gmail, Mercado Pago, SIAT or production records.
+- Schema changes must be forward-compatible. Do not drop or rewrite user data as
+  a side effect of startup. Legacy lineage and original PDFs must remain recoverable.
+- Changes to behavior or operator commands include corresponding README updates.
+- Preserve English code identifiers and everyday Spanish user-facing copy.
 
 ## Local setup and commands
 
-Do not overwrite an existing `.env`. For a fresh checkout:
+Do not overwrite existing `.env` or `.env.local`. In the linked worktree:
 
-```bash
-test -f .env || cp .env.example .env
-docker compose up -d postgres
-python3 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
-.venv/bin/home-lab init-db
+```sh
+npm install
+npm run dev:setup
+npm run dev
 ```
 
-Useful commands:
-
-```bash
-.venv/bin/python -m pytest
-.venv/bin/home-lab transform
-docker compose up -d --build web sync-runner
-docker compose config
-```
-
-`home-lab transform` runs `dbt build` with the repository's `dbt/` project and
-profiles. It requires the configured local PostgreSQL instance.
+`dev:setup` generates an isolated `.env.local`, PostgreSQL port, Compose project,
+volume and private local login instructions. The app is http://localhost:3000;
+`.private/local-login.txt` contains the generated local accesses. Do not print
+passwords in tool output. Keep the application running for the user's validation.
 
 ## Validation expectations
 
-- Run the most focused relevant pytest tests while iterating, then the full
-  `.venv/bin/python -m pytest` suite for Python behavior changes.
-- Run `.venv/bin/home-lab transform` for database, dbt, reconciliation, or
-  Ledger-query changes.
-- Run `docker compose config` for Compose changes.
-- Run `bash -n` on every changed shell script.
-- For House Ops changes, run the Django integration tests and any relevant dbt
-  build; exercise the page locally and run the Playwright smoke when visual or
-  interaction behavior matters.
-- Documentation-only changes do not require runtime tests. Review rendered
-  structure, verify commands against the repository, and run `git diff --check`.
-- If a validation cannot run because services or credentials are unavailable,
-  report exactly what was skipped and why.
+- Run `npm run typecheck`, focused Vitest tests and `npm test` for behavior changes.
+- Run `npm run test:integration` for schema, importer or monetary persistence work;
+  it verifies the migration against a synthetic legacy database and repeat imports.
+- For visual/interaction changes, run `npm run test:e2e` and visually inspect the
+  desktop/mobile synthetic previews. Passing tests alone does not prove the
+  experience is ready. The test runner never uses household or production data.
+- Run `npm run build`; build and smoke the container for deployment changes.
+- Run `docker compose --env-file .env.example config --quiet` and the equivalent
+  production example for Compose changes. Use `bash -n` on changed shell scripts.
+- Run `git diff --check`. Report exactly which validations were skipped and why.
+- Python tests and dbt build are relevant only when changing the archived Python
+  behavior or warehouse models; they are not required to use the Next.js app.
 
 ## Sensitive data and external actions
 
@@ -244,14 +222,14 @@ profiles. It requires the configured local PostgreSQL instance.
   3. Create a new branch named `codex/<slug>` and a linked worktree at
      `../worktrees/house-ops/<slug>`, based on the current `HEAD`.
   4. From the new worktree, run `scripts/init-worktree.sh` before any test,
-     Compose, or application command. This creates the worktree's isolated
-     `.env`, `.venv`, ports, Compose project, database volume, and data paths.
+     Compose, or application command. This installs Node dependencies and creates
+     isolated `.env.local`, ports, Compose project, database volume and data paths.
      Do not copy another checkout's `.env` or run Compose with improvised
      settings.
   5. Perform every file modification and all task-specific validation from that
      worktree. Do not modify the primary checkout.
-- `scripts/dev-up.sh` starts isolated PostgreSQL, dbt and Django migrations by
-  default; add `--full` for browser work. Production snapshots are not
+- `scripts/dev-up.sh` starts isolated PostgreSQL and forward-only Prisma migrations
+  by default; add `--full` for the Next.js web server. Production snapshots are not
   available from the laptop; use local or synthetic development data.
 - Choose a unique slug if the intended branch or directory already exists.
 - Do not copy, stash, reset, clean, or otherwise alter uncommitted changes from

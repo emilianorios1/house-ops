@@ -22,3 +22,14 @@ secrets/
 
 # Local editor and operating-system files
 .DS_Store
+
+# Next.js and private local worktree files
+node_modules/
+.next/
+*.tsbuildinfo
+.env.local
+.private/
+data/shared-documents/
+playwright-report/
+test-results/
+next-env.d.ts

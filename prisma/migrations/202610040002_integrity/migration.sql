@@ -1,0 +1,11 @@
+ALTER TABLE shared_expenses ADD CONSTRAINT shared_expense_amount CHECK ("amountCents" > 0 AND "amountCents" <= 99999999999999 AND "extraordinaryCents" >= 0 AND "extraordinaryCents" <= "amountCents");
+ALTER TABLE shared_expenses ADD CONSTRAINT shared_expense_category CHECK (category IN ('Expensas','Luz','Agua','Gas','TGI','Internet','Otros') AND (category = 'Expensas' OR "extraordinaryCents" = 0));
+CREATE UNIQUE INDEX shared_expense_document_due ON shared_expenses ("documentId", "dueDate") WHERE NOT archived AND "documentId" IS NOT NULL;
+ALTER TABLE shared_rents ADD CONSTRAINT shared_rent_amount CHECK ("grossCents" > 0 AND "grossCents" <= 99999999999999 AND ("creditOverrideCents" IS NULL OR "creditOverrideCents" >= 0));
+ALTER TABLE shared_rents ADD CONSTRAINT shared_rent_month CHECK (month ~ '^20[0-9]{2}-(0[1-9]|1[0-2])$');
+ALTER TABLE shared_payments ADD CONSTRAINT shared_payment_amount CHECK ("amountCents" > 0 AND "amountCents" <= 99999999999999);
+ALTER TABLE shared_payments ADD CONSTRAINT shared_payment_target CHECK (("expenseId" IS NOT NULL) <> ("rentMonth" IS NOT NULL));
+ALTER TABLE shared_payments ADD CONSTRAINT shared_payment_person CHECK (payer IN ('emiliano','vitoria','unassigned'));
+ALTER TABLE shared_settlements ADD CONSTRAINT shared_settlement_amount CHECK ("amountCents" > 0 AND "amountCents" <= 99999999999999 AND "from" IN ('emiliano','vitoria') AND month ~ '^20[0-9]{2}-(0[1-9]|1[0-2])$');
+CREATE FUNCTION shared_audit_append_only() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Audit events are append-only'; END $$;
+CREATE TRIGGER shared_audit_immutable BEFORE UPDATE OR DELETE ON shared_audit_events FOR EACH ROW EXECUTE FUNCTION shared_audit_append_only();

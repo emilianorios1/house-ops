@@ -14,3 +14,9 @@ dbt/target
 data
 secrets
 worktrees
+node_modules
+.next
+.private
+test-results
+playwright-report
+*.tsbuildinfo

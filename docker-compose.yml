@@ -1,56 +1,12 @@
-name: home-lab-dev
-
-x-app-environment: &app-environment
-  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-  DBT_POSTGRES_HOST: postgres
-  DBT_POSTGRES_PORT: "5432"
-  POSTGRES_DB: ${POSTGRES_DB}
-  POSTGRES_USER: ${POSTGRES_USER}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  DOCUMENT_STORE_PATH: /data/bronze/gmail
-  MONOTRIBUTO_ANNUAL_LIMIT_ARS: ${MONOTRIBUTO_ANNUAL_LIMIT_ARS:-}
-  AFIP_SDK_ACCESS_TOKEN: ${AFIP_SDK_ACCESS_TOKEN:-}
-  FINANCIAL_STATEMENT_STORE_PATH: /data/bronze/financial-statements
-  HOME_LAB_DBT_PROJECT_DIR: /workspace/dbt
-  PYTHONPATH: /workspace/src
-
-x-web-environment: &web-environment
-  <<: *app-environment
-  DJANGO_SETTINGS_MODULE: house_ops.settings
-  HOUSE_OPS_SECRET_KEY: ${HOUSE_OPS_SECRET_KEY}
-  HOUSE_OPS_DEBUG: ${HOUSE_OPS_DEBUG:-true}
-  HOUSE_OPS_ALLOWED_HOSTS: ${HOUSE_OPS_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
-
-x-sync-environment: &sync-environment
-  <<: *app-environment
-  GMAIL_CLIENT_SECRET_PATH: /secrets/gmail_client_secret.json
-  GMAIL_TOKEN_PATH: /secrets/gmail_token.json
-  GMAIL_QUERY: ${GMAIL_QUERY:-}
-  DOCUMENT_MAX_BYTES: ${DOCUMENT_MAX_BYTES:-20971520}
-  SIAT_TGI_ACCOUNT: ${SIAT_TGI_ACCOUNT:-}
-  SIAT_TGI_MANAGEMENT_CODE: ${SIAT_TGI_MANAGEMENT_CODE:-}
-  MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
-
-x-app-volumes: &app-volumes
-  - ./src:/workspace/src:ro
-  - ./dbt:/workspace/dbt:rw
-  - ./data:/data:rw
-
-x-sync-volumes: &sync-volumes
-  - ./src:/workspace/src:ro
-  - ./dbt:/workspace/dbt:rw
-  - ./data:/data:rw
-  - ./secrets:/secrets:rw
-
 services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-house_ops}
+      POSTGRES_USER: ${POSTGRES_USER:-house_ops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set an isolated local password}
     ports:
-      - "127.0.0.1:${HOME_LAB_DEV_POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${HOME_LAB_DEV_POSTGRES_PORT:-55432}:5432"
     volumes:
       - dev_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -59,91 +15,20 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
-    stop_grace_period: 30s
-
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
+    profiles: ["app"]
+    build: .
     environment:
-      <<: *web-environment
-      HOME_LAB_SYNC_RUNNER_URL: http://sync-runner:8080
-    command:
-      - python
-      - /app/manage.py
-      - runserver
-      - 0.0.0.0:8000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      DOCUMENT_STORE_PATH: /data/shared-documents
     ports:
-      - "127.0.0.1:${HOUSE_OPS_DEV_WEB_PORT:-8502}:8000"
-    volumes: *app-volumes
+      - "127.0.0.1:${HOUSE_OPS_DEV_WEB_PORT:-3000}:8000"
+    volumes:
+      - ./data/shared-documents:/data/shared-documents
     depends_on:
       postgres:
         condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "from urllib.request import urlopen; urlopen('http://localhost:8000/health/', timeout=3)"
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-    restart: unless-stopped
-    init: true
-
-  sync-runner:
-    image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
-    user: "${UID:-1000}:${GID:-1000}"
-    environment: *sync-environment
-    command: ["python", "-m", "home_lab.sync_runner"]
-    volumes: *sync-volumes
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "from urllib.request import urlopen; urlopen('http://localhost:8080/health', timeout=3)"
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
-    restart: unless-stopped
-    init: true
-
-  migrate:
-    image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
-    profiles: ["ops"]
-    user: "${UID:-1000}:${GID:-1000}"
-    environment:
-      <<: *web-environment
-      HOUSE_OPS_ADMIN_USERNAME: ${HOUSE_OPS_ADMIN_USERNAME:-emiliano}
-      HOUSE_OPS_ADMIN_PASSWORD: ${HOUSE_OPS_ADMIN_PASSWORD}
-      HOUSE_OPS_SECOND_USERNAME: ${HOUSE_OPS_SECOND_USERNAME:-vitoria}
-      HOUSE_OPS_SECOND_PASSWORD: ${HOUSE_OPS_SECOND_PASSWORD}
-    command: ["sh", "-ec", "home-lab init-db && home-lab parse-documents && home-lab transform && python manage.py migrate --noinput && python manage.py bootstrap_house_ops"]
-    volumes: *app-volumes
-    depends_on:
-      postgres:
-        condition: service_healthy
-    init: true
-
-  tools:
-    image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
-    profiles: ["ops"]
-    user: "${UID:-1000}:${GID:-1000}"
-    environment: *sync-environment
-    entrypoint: ["home-lab"]
-    volumes: *sync-volumes
-    depends_on:
-      postgres:
-        condition: service_healthy
-    init: true
-
 volumes:
   dev_postgres_data:
-    name: ${HOME_LAB_DEV_POSTGRES_VOLUME:-home-lab-dev-postgres-data}

@@ -1,48 +1,16 @@
 name: home-lab-prod
-
 x-app-environment: &app-environment
-  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-  DBT_POSTGRES_HOST: postgres
-  DBT_POSTGRES_PORT: "5432"
-  POSTGRES_DB: ${POSTGRES_DB}
-  POSTGRES_USER: ${POSTGRES_USER}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-  DOCUMENT_STORE_PATH: /data/bronze/gmail
-  FINANCIAL_STATEMENT_STORE_PATH: /data/bronze/financial-statements
-
-x-web-environment: &web-environment
-  <<: *app-environment
-  DJANGO_SETTINGS_MODULE: house_ops.settings
-  HOUSE_OPS_SECRET_KEY: ${HOUSE_OPS_SECRET_KEY:?HOUSE_OPS_SECRET_KEY must be set}
-  HOUSE_OPS_DEBUG: "false"
-  HOUSE_OPS_HTTPS: ${HOUSE_OPS_HTTPS:-false}
-  HOUSE_OPS_ALLOWED_HOSTS: ${HOUSE_OPS_ALLOWED_HOSTS:-*}
-
-x-sync-environment: &sync-environment
-  <<: *app-environment
-  GMAIL_CLIENT_SECRET_PATH: /secrets/gmail_client_secret.json
-  GMAIL_TOKEN_PATH: /secrets/gmail_token.json
-  GMAIL_QUERY: ${GMAIL_QUERY:-}
-  DOCUMENT_MAX_BYTES: ${DOCUMENT_MAX_BYTES:-20971520}
-  SIAT_TGI_ACCOUNT: ${SIAT_TGI_ACCOUNT:-}
-  SIAT_TGI_MANAGEMENT_CODE: ${SIAT_TGI_MANAGEMENT_CODE:-}
-  MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
-
-x-sync-volumes: &sync-volumes
-  - ${HOME_LAB_PROD_DATA_DIR:?HOME_LAB_PROD_DATA_DIR must be set}:/data:rw
-  - ${HOME_LAB_PROD_SECRETS_DIR:?HOME_LAB_PROD_SECRETS_DIR must be set}:/secrets:rw
-
-x-sync-tmpfs: &sync-tmpfs
-  - /tmp:uid=${HOME_LAB_HOST_UID:-1000},gid=${HOME_LAB_HOST_GID:-1000},mode=0750
-  - /app/dbt/logs:uid=${HOME_LAB_HOST_UID:-1000},gid=${HOME_LAB_HOST_GID:-1000},mode=0750
-  - /app/dbt/target:uid=${HOME_LAB_HOST_UID:-1000},gid=${HOME_LAB_HOST_GID:-1000},mode=0750
-
-x-logging: &default-logging
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  AUTH_SECRET: ${AUTH_SECRET:-${HOUSE_OPS_SECRET_KEY:?Set AUTH_SECRET or the existing HOUSE_OPS_SECRET_KEY}}
+  AUTH_URL: https://casa.bordarteuniformes.com.ar
+  DOCUMENT_STORE_PATH: /data/shared-documents
+  LEGACY_DOCUMENT_ROOT: /data
+  NODE_ENV: production
+x-logging: &logging
   driver: json-file
   options:
     max-size: 10m
     max-file: "3"
-
 services:
   postgres:
     image: postgres:17-alpine
@@ -53,43 +21,39 @@ services:
       POSTGRES_INITDB_ARGS: --data-checksums --encoding=UTF8
     volumes:
       - prod_postgres_data:/var/lib/postgresql/data
-    networks:
-      - backend
+    networks: [backend]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 20
-      start_period: 10s
     restart: unless-stopped
     stop_grace_period: 60s
-    shm_size: 256mb
-    logging: *default-logging
-
+    logging: *logging
   web:
-    image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
-    environment:
-      <<: *web-environment
-      AFIP_SDK_ACCESS_TOKEN: ${AFIP_SDK_ACCESS_TOKEN:-}
-      HOME_LAB_SYNC_RUNNER_URL: http://sync-runner:8080
+    image: ${HOME_LAB_IMAGE:?Set an immutable image}
+    # Preserve the existing data directory ownership and original PDFs.
+    user: "${HOME_LAB_HOST_UID:-1000}:${HOME_LAB_HOST_GID:-1000}"
+    environment: *app-environment
     ports:
       - "${HOME_LAB_PROD_BIND:-127.0.0.1}:${HOME_LAB_PROD_PORT:-8501}:8000"
     volumes:
-      - ${HOME_LAB_PROD_DATA_DIR:?HOME_LAB_PROD_DATA_DIR must be set}:/data:ro
+      - ${HOME_LAB_PROD_DATA_DIR:?Set the existing data directory}:/data:rw
     networks:
       backend: {}
       frontend:
-        aliases:
-          - house-ops-web
+        aliases: [house-ops-web]
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
       test:
-        - CMD
-        - python
-        - -c
-        - "from urllib.request import urlopen; urlopen('http://localhost:8000/health/', timeout=3)"
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:8000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -98,105 +62,42 @@ services:
     init: true
     read_only: true
     tmpfs:
-      - /tmp:uid=10001,gid=10001,mode=0750
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    stop_grace_period: 30s
-    logging: *default-logging
-
-  sync-runner:
-    image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
-    user: "${HOME_LAB_HOST_UID:-1000}:${HOME_LAB_HOST_GID:-1000}"
-    environment: *sync-environment
-    command: ["python", "-m", "home_lab.sync_runner"]
-    volumes: *sync-volumes
-    tmpfs: *sync-tmpfs
-    networks:
-      - backend
-      - egress
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "from urllib.request import urlopen; urlopen('http://localhost:8080/health', timeout=3)"
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 5s
-    restart: unless-stopped
-    init: true
-    read_only: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    stop_grace_period: 30s
-    logging: *default-logging
-
+      - /tmp:uid=${HOME_LAB_HOST_UID:-1000},gid=${HOME_LAB_HOST_GID:-1000},mode=0750
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
   migrate:
-    image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
-    profiles: ["ops"]
+    image: ${HOME_LAB_IMAGE:?Set an immutable image}
+    profiles: [ops]
+    user: "${HOME_LAB_HOST_UID:-1000}:${HOME_LAB_HOST_GID:-1000}"
     environment:
-      <<: *web-environment
-      HOUSE_OPS_ADMIN_USERNAME: ${HOUSE_OPS_ADMIN_USERNAME:-emiliano}
-      HOUSE_OPS_ADMIN_PASSWORD: ${HOUSE_OPS_ADMIN_PASSWORD:?HOUSE_OPS_ADMIN_PASSWORD must be set}
-      HOUSE_OPS_SECOND_USERNAME: ${HOUSE_OPS_SECOND_USERNAME:-vitoria}
-      HOUSE_OPS_SECOND_PASSWORD: ${HOUSE_OPS_SECOND_PASSWORD:?HOUSE_OPS_SECOND_PASSWORD must be set}
-    command: ["sh", "-ec", "home-lab init-db && home-lab parse-documents && home-lab transform && python manage.py migrate --noinput && python manage.py bootstrap_house_ops"]
+      <<: *app-environment
+      HOUSE_OPS_ADMIN_PASSWORD: ${HOUSE_OPS_ADMIN_PASSWORD:-}
+      HOUSE_OPS_SECOND_PASSWORD: ${HOUSE_OPS_SECOND_PASSWORD:-}
+    command:
+      [
+        "sh",
+        "-ec",
+        "npm run db:migrate && npm run import:legacy && npm run db:seed",
+      ]
     volumes:
-      - ${HOME_LAB_PROD_DATA_DIR:?HOME_LAB_PROD_DATA_DIR must be set}:/data:ro
-    networks:
-      - backend
+      - ${HOME_LAB_PROD_DATA_DIR:?Set the existing data directory}:/data:rw
+    networks: [backend]
     depends_on:
       postgres:
         condition: service_healthy
     read_only: true
     tmpfs:
-      - /tmp:uid=10001,gid=10001,mode=0750
-      - /app/dbt/logs:uid=10001,gid=10001,mode=0750
-      - /app/dbt/target:uid=10001,gid=10001,mode=0750
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    logging: *default-logging
-
-  tools:
-    image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
-    profiles: ["ops"]
-    user: "${HOME_LAB_HOST_UID:-1000}:${HOME_LAB_HOST_GID:-1000}"
-    environment: *sync-environment
-    entrypoint: ["home-lab"]
-    volumes: *sync-volumes
-    tmpfs: *sync-tmpfs
-    networks:
-      - backend
-      - egress
-    depends_on:
-      postgres:
-        condition: service_healthy
-    init: true
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    logging: *default-logging
-
+      - /tmp:uid=${HOME_LAB_HOST_UID:-1000},gid=${HOME_LAB_HOST_GID:-1000},mode=0750
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
 volumes:
   prod_postgres_data:
     name: home-lab-prod-postgres-data
-
 networks:
   backend:
     name: home-lab-prod-backend
     internal: true
   frontend:
     name: home-lab-prod-frontend
-  egress:
-    name: home-lab-prod-egress
