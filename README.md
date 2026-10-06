@@ -5,6 +5,10 @@ dividirlos por la mitad y saber quién adelantó dinero. Next.js + TypeScript,
 PostgreSQL, Prisma, Zod, Auth.js y Tailwind. No requiere Python, Django, dbt,
 Gmail, Mercado Pago, un runner de sincronización ni un proveedor de IA para funcionar.
 
+El botón de sol/luna en la barra superior (también al iniciar sesión) alterna
+entre modo claro y oscuro. La elección se guarda en ese navegador; al abrir Casa
+por primera vez se respeta el modo del dispositivo.
+
 ## Cómo se reparten los gastos
 
 - Internet es un gasto personal de Emiliano y queda fuera del reparto. No aparece

@@ -1,8 +1,12 @@
 import { LoginForm } from "@/components/forms";
 import { Home } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 export default function LoginPage() {
   return (
     <main className="login-page">
+      <div className="login-theme">
+        <ThemeToggle />
+      </div>
       <div className="login-copy">
         <span className="brand">
           <Home />

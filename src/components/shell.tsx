@@ -10,6 +10,7 @@ import {
   Heart,
 } from "lucide-react";
 import { logout } from "@/app/actions";
+import { ThemeToggle } from "@/components/theme-toggle";
 export function Shell({
   name,
   active = "month",
@@ -81,6 +82,7 @@ export function Shell({
         <header className="topbar">
           <span>Gastos compartidos</span>
           <span className="household">
+            <ThemeToggle />
             <span className="avatar small">E</span>
             <span className="avatar small coral">V</span>
             <span>Emiliano & Vitoria</span>
