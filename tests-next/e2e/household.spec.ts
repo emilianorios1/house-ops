@@ -2,6 +2,38 @@ import { test, expect } from "@playwright/test";
 import { config } from "dotenv";
 import { syntheticPdf } from "../helpers";
 config({ path: ".env.local", quiet: true });
+test("theme follows the device and remembers an explicit choice after reload", async ({
+  page,
+}, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/login");
+  const toggle = page.getByRole("button", { name: "Modo oscuro", exact: true });
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.screenshot({
+    path: `.private/previews/${info.project.name}-dark-login.png`,
+    fullPage: true,
+  });
+  await toggle.click();
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await toggle.click();
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  expect(await page.evaluate(() => localStorage.getItem("casa-theme"))).toBe(
+    "dark",
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  expect(errors).toEqual([]);
+});
 test("private pages and PDFs require a household session", async ({
   page,
   request,
@@ -29,13 +61,11 @@ test("upload, next-month rent credit, supplier payment, transfer, audit and mobi
     "EXPENSAS EXTRAORDINARIAS 50.00",
     `1er.Vencim.: 14/04/${year} $ 1200.00`,
   ]);
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: `synthetic-${Date.now()}.pdf`,
-      mimeType: "application/pdf",
-      buffer: pdf,
-    });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: `synthetic-${Date.now()}.pdf`,
+    mimeType: "application/pdf",
+    buffer: pdf,
+  });
   await expect(
     page.getByText("Leímos la liquidación.", { exact: false }),
   ).toBeVisible();
@@ -93,7 +123,14 @@ test("upload, next-month rent credit, supplier payment, transfer, audit and mobi
     path: `.private/previews/${info.project.name}.png`,
     fullPage: true,
   });
+  await page.getByRole("button", { name: "Modo oscuro", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.screenshot({
+    path: `.private/previews/${info.project.name}-dark.png`,
+    fullPage: true,
+  });
   await page.goto("/documents");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(
     page.getByRole("heading", { name: "Comprobantes", exact: true }),
   ).toBeVisible();
