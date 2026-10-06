@@ -72,7 +72,25 @@ curl --fail --silent --show-error --location https://casa.bordarteuniformes.com.
 running_image="$(docker inspect --format '{{.Config.Image}}' "$("$compose_command" ps -q web)")"
 if [[ "$running_image" != "$image" ]]; then echo "Image mismatch" >&2; exit 1; fi
 admin_password="$(awk 'index($0,"HOUSE_OPS_ADMIN_PASSWORD=")==1{value=substr($0,length("HOUSE_OPS_ADMIN_PASSWORD=")+1)}END{print value}' "$prod_env")"
-docker exec -e HOUSE_OPS_ADMIN_PASSWORD="$admin_password" "$("$compose_command" ps -q web)" node scripts/smoke-production.mjs
+web_container="$("$compose_command" ps -q web)"
+configured_login_matches="$(docker exec -i -e HOUSE_OPS_ADMIN_PASSWORD="$admin_password" "$web_container" node --import tsx --input-type=module <<'NODE'
+import { PrismaClient } from '@prisma/client';
+import { verifyPassword } from './src/lib/password.ts';
+const db = new PrismaClient();
+try {
+  const user = await db.user.findUniqueOrThrow({where:{username:'emiliano'}});
+  process.stdout.write(verifyPassword(process.env.HOUSE_OPS_ADMIN_PASSWORD ?? '', user.passwordHash) ? '1' : '0');
+} finally { await db.$disconnect(); }
+NODE
+)"
+smoke_options=()
+if [[ "$configured_login_matches" == 0 ]]; then
+    echo "The installed bootstrap password differs from the preserved user password; verifying with a temporary maintenance session. No password was changed."
+    smoke_options+=(--maintenance-session)
+elif [[ "$configured_login_matches" != 1 ]]; then
+    echo "Password compatibility check failed" >&2; exit 1
+fi
+docker exec -i -e HOUSE_OPS_ADMIN_PASSWORD="$admin_password" "$web_container" node --input-type=module - "${smoke_options[@]}" < "$repo_root/scripts/smoke-production.mjs"
 trap - ERR EXIT
 # Keep previous config for operator rollback. Never restore/drop a database automatically.
 echo "Next.js deployed on the existing VPS and database. Previous config retained for rollback."
