@@ -88,6 +88,7 @@ jobs:
           npx playwright install --with-deps chromium
           E2E_CHANNEL=chromium npm run test:e2e
       - run: docker build --tag house-ops:ci .
+      - run: bash scripts/test-handoff-stream.sh house-ops:ci
   publish:
     name: Publish immutable Next.js image
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || (inputs.operation == 'deploy' && inputs.deploy_image == ''))

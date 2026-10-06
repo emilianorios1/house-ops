@@ -9,12 +9,15 @@ web="$(docker ps -q --filter label=com.docker.compose.project=home-lab-prod --fi
 remote="/tmp/casa-handoff-${GITHUB_RUN_ID:?}-${GITHUB_RUN_ATTEMPT:?}"
 service_user="$(docker inspect --format '{{.Config.User}}' "$web")"
 [[ "$service_user" =~ ^[0-9]+(:[0-9]+)?$ ]] || { echo "Expected numeric service identity" >&2; exit 1; }
-cleanup() { docker exec --user 0 "$web" rm -rf -- "$remote" >/dev/null 2>&1 || true; }
+cleanup() { docker exec "$web" rm -rf -- "$remote" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
-docker cp "$bundle" "$web:$remote"
-# These temporary files are readable only inside the app container; no host
-# ownership or production credentials are changed. cap_drop: ALL permits chmod
-# on the files owned by the copying identity, but deliberately denies chown.
-docker exec --user 0 "$web" chmod -R u+rwX,go+rX "$remote"
+# Docker's archive API rejects docker cp into a read-only rootfs, even when /tmp
+# is writable. Stream validated files through exec into the existing private
+# tmpfs, using the service identity and without restoring archive ownership.
+tar --create --file - --directory "$bundle" . | docker exec -i "$web" sh -ec '
+    umask 077
+    mkdir -m 0700 -- "$1"
+    tar --extract --no-same-owner --no-same-permissions --file - --directory "$1"
+' sh "$remote"
 docker exec "$web" node --import tsx scripts/import-handoff.ts "$remote/records.json"
 docker exec "$web" node scripts/smoke-production.mjs --maintenance-session
