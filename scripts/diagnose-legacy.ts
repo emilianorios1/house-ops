@@ -47,12 +47,12 @@ try {
   }
   console.log("Read-only legacy diagnostics passed.");
 } catch (error) {
-  const e = error as { name?: string; code?: string; meta?: { code?: string } };
+  const e = error as { name?: string; code?: string; errorCode?: string; meta?: { code?: string } };
   console.error(
     JSON.stringify({
       phase,
       errorType: e.name,
-      code: e.code,
+      code: e.code ?? e.errorCode,
       sqlCode: e.meta?.code,
       databaseWrites: 0,
     }),
