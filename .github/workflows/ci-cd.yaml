@@ -22,6 +22,10 @@ on:
         description: "Optional already published image for read-only import diagnostics"
         type: string
         required: false
+      deploy_image:
+        description: "Optional immutable image already validated by CI, for an operator-only retry"
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -42,7 +46,7 @@ jobs:
           DIAGNOSTIC_IMAGE: ${{ inputs.diagnostic_image }}
         run: bash scripts/diagnose-production-import.sh "$DIAGNOSTIC_IMAGE"
   verify:
-    if: github.event_name != 'workflow_dispatch' || inputs.operation == 'deploy'
+    if: github.event_name != 'workflow_dispatch' || (inputs.operation == 'deploy' && inputs.deploy_image == '')
     # Preserve the required main-branch check context; verification now uses Next.js.
     name: Tests, dbt and image
     runs-on: ubuntu-latest
@@ -86,7 +90,7 @@ jobs:
       - run: docker build --tag house-ops:ci .
   publish:
     name: Publish immutable Next.js image
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || inputs.operation == 'deploy')
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || (inputs.operation == 'deploy' && inputs.deploy_image == ''))
     needs: verify
     runs-on: ubuntu-latest
     permissions:
@@ -116,7 +120,7 @@ jobs:
   deploy:
     name: Approved VPS cutover
     # Merging this migration PR does not change the public service automatically.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'deploy'
+    if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'deploy' && (needs.publish.result == 'success' || inputs.deploy_image != '')
     needs: publish
     runs-on: [self-hosted, linux, x64, vps-production]
     environment: production
@@ -133,7 +137,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: sudo -n ./scripts/deploy-production.sh '${{ needs.publish.outputs.image }}@${{ needs.publish.outputs.digest }}'
+      - name: Deploy the verified immutable image
+        env:
+          DEPLOY_IMAGE: ${{ inputs.deploy_image || format('{0}@{1}', needs.publish.outputs.image, needs.publish.outputs.digest) }}
+        run: |
+          [[ "$DEPLOY_IMAGE" =~ ^ghcr.io/emilianorios1/house-ops@sha256:[a-f0-9]{64}$ ]]
+          sudo -n ./scripts/deploy-production.sh "$DEPLOY_IMAGE"
   upload-session:
     name: Encrypted temporary upload session
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.operation == 'upload-session'

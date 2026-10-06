@@ -121,6 +121,10 @@ El corte conserva también la raíz de documentos configurada en Django: sus rut
 son relativas a `DOCUMENT_STORE_PATH`, habitualmente `/data/bronze/gmail`, y no
 al montaje `/data`. La guarda como `HOUSE_OPS_LEGACY_DOCUMENT_ROOT` para que los
 reintentos sigan encontrando los originales sin moverlos.
+Un reintento que cambia sólo el operador puede reutilizar mediante `deploy_image`
+el digest inmutable de una imagen ya aprobada por CI. La prueba de acceso conserva
+la contraseña real del usuario: si ya no coincide con la contraseña de bootstrap
+guardada en la instalación, comprueba la sesión temporal sin restablecerla.
 
 `npm run import:legacy` lee el snapshot Gold/Silver existente y las fuentes Bronze
 en la misma base; no ejecuta dbt ni sincronizaciones. Los originales se conservan.
