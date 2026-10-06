@@ -27,6 +27,8 @@ curl --fail --silent --show-error https://casa.bordarteuniformes.com.ar/health/ 
 web_container="$("$compose_command" ps -q web)"
 if [[ -z "$web_container" ]]; then echo "Existing web container not found" >&2; exit 1; fi
 docker inspect --format 'Active image: {{.Config.Image}}' "$web_container"
+legacy_document_root="$(docker inspect --format '{{json .Config.Env}}' "$web_container" | python3 -c 'import json,sys; values=json.load(sys.stdin); print(next((v.split("=",1)[1] for v in values if v.startswith("LEGACY_DOCUMENT_ROOT=")),next((v.split("=",1)[1] for v in values if v.startswith("DOCUMENT_STORE_PATH=")),"/data/bronze/gmail")))')"
+[[ "$legacy_document_root" == /data/* && "$legacy_document_root" != *$'\n'* && "$legacy_document_root" != *$'\r'* ]] || { echo "Legacy document root not inside the preserved data mount" >&2; exit 1; }
 docker network inspect home-lab-prod-frontend --format '{{range .Containers}}{{println .Name}}{{end}}'
 if ! docker inspect --format '{{json .NetworkSettings.Networks}}' "$web_container" | grep -q house-ops-web; then
     echo "Existing house-ops-web proxy alias not confirmed" >&2; exit 1
@@ -60,7 +62,7 @@ sha256sum --check --status "${document_backup}.sha256"
 echo "Frozen database restore and external document backup verified."
 install -m 0644 "$repo_root/compose.production.yaml" "${config_dir}/compose.production.yaml"
 umask 077
-printf 'HOME_LAB_IMAGE=%s\n' "$image" > "$deployment_env"
+printf 'HOME_LAB_IMAGE=%s\nHOUSE_OPS_LEGACY_DOCUMENT_ROOT=%s\n' "$image" "$legacy_document_root" > "$deployment_env"
 "$compose_command" config --quiet
 "$compose_command" pull web migrate
 "$compose_command" up -d --wait --wait-timeout 120 postgres

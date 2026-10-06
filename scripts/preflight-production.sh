@@ -11,8 +11,6 @@ docker inspect --format '{{range .Mounts}}{{if eq .Destination "/data"}}Document
 docker inspect --format '{{range $name,$network := .NetworkSettings.Networks}}Network: {{$name}}; aliases: {{json $network.Aliases}}{{println}}{{end}}' "$web"
 docker exec "$postgres" sh -ec 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --no-align --command="SELECT to_regclass('\''gold.shared_expense_items'\'') IS NOT NULL, to_regclass('\''gold.documents'\'') IS NOT NULL, to_regclass('\''public.auth_user'\'') IS NOT NULL, to_regclass('\''public.shared_expenses'\'') IS NOT NULL"'
 docker exec "$web" sh -ec 'test -d /data; printf "Stored PDFs: "; find /data -type f -name "*.pdf" | wc -l'
-query="SELECT table_schema,table_name,string_agg(column_name,',' ORDER BY ordinal_position) FROM information_schema.columns WHERE (table_schema='bronze' AND table_name IN ('manual_shared_expenses','manual_monthly_rents')) OR (table_schema='gold' AND table_name IN ('shared_expense_items','documents','movements')) GROUP BY table_schema,table_name ORDER BY table_schema,table_name; SELECT split_part(password,'\$',1),count(*) FROM auth_user GROUP BY 1; SELECT 'imported_users',count(*) FROM shared_users; SELECT 'imported_documents',count(*) FROM shared_documents; SELECT 'imported_expenses',count(*) FROM shared_expenses;"
-docker exec "$postgres" sh -ec 'psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --no-align --command="$1"' sh "$query"
 proxy="$(docker ps -q --filter ancestor=caddy:2)"
 if [[ -z "$proxy" ]]; then proxy="$(docker ps --format '{{.ID}} {{.Image}}' | awk '$2 ~ /^caddy:/ { print $1; exit }')"; fi
 [[ -n "$proxy" ]] || { echo "Active Caddy proxy not found" >&2; exit 1; }
