@@ -117,6 +117,10 @@ desde `workflow_dispatch`, sólo en `main`, con el entorno `production` y el run
 backup, detiene los escritores antiguos, crea tablas `shared_*`, importa el
 snapshot existente, conserva las contraseñas Django compatibles y recién entonces
 arranca Next.js. Si falla, recupera los servicios anteriores sin borrar tablas.
+El corte conserva también la raíz de documentos configurada en Django: sus rutas
+son relativas a `DOCUMENT_STORE_PATH`, habitualmente `/data/bronze/gmail`, y no
+al montaje `/data`. La guarda como `HOUSE_OPS_LEGACY_DOCUMENT_ROOT` para que los
+reintentos sigan encontrando los originales sin moverlos.
 
 `npm run import:legacy` lee el snapshot Gold/Silver existente y las fuentes Bronze
 en la misma base; no ejecuta dbt ni sincronizaciones. Los originales se conservan.

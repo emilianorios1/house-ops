@@ -18,6 +18,10 @@ on:
         description: "Public RSA key for an encrypted temporary upload session"
         type: string
         required: false
+      diagnostic_image:
+        description: "Optional already published image for read-only import diagnostics"
+        type: string
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -32,6 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - run: bash scripts/preflight-production.sh
+      - name: Read-only legacy document diagnostics
+        if: inputs.diagnostic_image != ''
+        env:
+          DIAGNOSTIC_IMAGE: ${{ inputs.diagnostic_image }}
+        run: bash scripts/diagnose-production-import.sh "$DIAGNOSTIC_IMAGE"
   verify:
     if: github.event_name != 'workflow_dispatch' || inputs.operation == 'deploy'
     # Preserve the required main-branch check context; verification now uses Next.js.

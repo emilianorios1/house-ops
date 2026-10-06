@@ -4,7 +4,7 @@ x-app-environment: &app-environment
   AUTH_SECRET: ${AUTH_SECRET:-${HOUSE_OPS_SECRET_KEY:?Set AUTH_SECRET or the existing HOUSE_OPS_SECRET_KEY}}
   AUTH_URL: https://casa.bordarteuniformes.com.ar
   DOCUMENT_STORE_PATH: /data/shared-documents
-  LEGACY_DOCUMENT_ROOT: /data
+  LEGACY_DOCUMENT_ROOT: ${HOUSE_OPS_LEGACY_DOCUMENT_ROOT:-/data/bronze/gmail}
   NODE_ENV: production
 x-logging: &logging
   driver: json-file
