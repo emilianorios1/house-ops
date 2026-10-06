@@ -125,6 +125,8 @@ Un reintento que cambia sólo el operador puede reutilizar mediante `deploy_imag
 el digest inmutable de una imagen ya aprobada por CI. La prueba de acceso conserva
 la contraseña real del usuario: si ya no coincide con la contraseña de bootstrap
 guardada en la instalación, comprueba la sesión temporal sin restablecerla.
+Las cargas asistidas transfieren el manifiesto por la entrada del proceso hacia
+el `/tmp` privado del contenedor; el filesystem raíz permanece de sólo lectura.
 
 `npm run import:legacy` lee el snapshot Gold/Silver existente y las fuentes Bronze
 en la misma base; no ejecuta dbt ni sincronizaciones. Los originales se conservan.
