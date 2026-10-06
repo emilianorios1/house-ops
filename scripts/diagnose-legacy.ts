@@ -34,7 +34,7 @@ try {
     if (relative.startsWith("/data/")) relative = relative.slice(6);
     else if (relative.startsWith("data/")) relative = relative.slice(5);
     phase = "document-path-" + style;
-    const root = await realpath("/data");
+    const root = await realpath(process.env.LEGACY_DOCUMENT_ROOT ?? "/data/bronze/gmail");
     const path = await realpath(resolve(root, relative));
     if (!path.startsWith(root + sep)) throw Error("OutsideRoot");
     phase = "document-hash";
