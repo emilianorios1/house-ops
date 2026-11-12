@@ -2,12 +2,101 @@
 
 Una app para Emiliano y Vitoria: guardar facturas, ver los gastos de cada mes,
 dividirlos por la mitad y saber quién adelantó dinero. Next.js + TypeScript,
-PostgreSQL, Prisma, Zod, Auth.js y Tailwind. No requiere Python, Django, dbt,
+PostgreSQL, Prisma, Zod, Better Auth y Tailwind. No requiere Python, Django, dbt,
 Gmail, Mercado Pago, un runner de sincronización ni un proveedor de IA para funcionar.
 
 El botón de sol/luna en la barra superior (también al iniciar sesión) alterna
 entre modo claro y oscuro. La elección se guarda en ese navegador; al abrir Casa
 por primera vez se respeta el modo del dispositivo.
+
+## Casa en Android y iPhone
+
+Desde **Instalar y avisos**, instalá Casa en Chrome para Android o elegí
+**Compartir → Agregar a pantalla de inicio** en Safari para iPhone. Abre con
+ícono propio y conserva los mismos datos de la web. En iPhone, ingresá una vez
+desde el ícono: la sesión de Safari puede ser independiente. Necesita internet
+para consultar y guardar; no guarda páginas financieras ni PDF en caché.
+
+Better Auth mantiene la sesión durante **90 días sin usar Casa**. La apertura,
+el regreso al primer plano y una consulta cada 15 minutos mientras está visible
+renuevan la sesión en la base y su cookie HttpOnly (Secure bajo HTTPS, SameSite
+Lax). Las lecturas de páginas del servidor no renuevan cookies. Cerrar la app o
+reiniciar el teléfono conserva el ingreso; cerrar sesión, borrar datos o
+desinstalar puede requerir ingresar de nuevo. Los usuarios inactivos no acceden.
+No hay registro público ni cambios de contraseña expuestos. La migración desde
+Auth.js requiere un nuevo ingreso y conserva los usuarios y hashes existentes,
+incluidos Django. Las identidades técnicas `@casa.invalid` son internas; no se
+envían correos. Las tablas de autenticación son `shared_auth_*`; los hashes
+anteriores permanecen disponibles para rollback. `db:seed` agrega identidades
+faltantes sin restablecer contraseñas. No editar hashes manualmente: cualquier
+futuro cambio de contraseña debe contemplar ambos registros y el rollback.
+
+### Activar avisos
+
+Abrí Casa instalada y tocá **Activar avisos**, aceptá el permiso y usá
+**Enviar aviso de prueba**. iPhone requiere iOS 16.4 o posterior. Cada teléfono
+tiene sus controles de vencimientos y movimientos. Cerrar sesión desactiva sus
+avisos; al volver a ingresar hay que activarlos nuevamente. Un permiso bloqueado
+se cambia en los ajustes del teléfono. Los detalles e importes pueden verse en
+la pantalla bloqueada: esta es la elección actual del hogar.
+
+- A las **9:00 de Argentina**, se envía un resumen de facturas pendientes que
+  vencen hoy o mañana. Excluye Internet, gastos archivados y facturas pagadas;
+  descuenta pagos parciales y omite pagos anulados. Sin fecha de vencimiento en
+  alquileres, no se inventan recordatorios de alquiler.
+- Al registrar un pago de factura, alquiler o reintegro, se avisa al otro usuario
+  que tenga activados los movimientos. Distingue quién registró de quién pagó.
+  No avisa por importaciones, registros anteriores, ediciones ni anulaciones.
+- Tocar el aviso abre el mes; la sesión sigue siendo necesaria. El resumen muestra
+  hasta tres conceptos y la cantidad restante. La llegada depende de la conexión,
+  los permisos y los ajustes del teléfono; no garantiza puntualidad exacta.
+
+### Operación de notificaciones
+
+En desarrollo, `npm run push:setup` crea claves exclusivas en `.private/push.env`,
+sin imprimirlas ni sobrescribir `.env.local`. Reiniciá `npm run dev` si ya estaba
+abierto y ejecutá `npm run notifications:work` en otra terminal. Para Compose
+local usá `docker compose --env-file .env.local --env-file .private/push.env
+--profile app up -d web notifications` después del setup de base. Las claves
+locales no se copian a producción. Si usás otro puerto, establecé
+`BETTER_AUTH_URL=http://localhost:PUERTO` para ese proceso, sin editar credenciales.
+Un teléfono necesita HTTPS accesible: el localhost de la laptop no permite
+validar instalación y Web Push desde el teléfono.
+
+El proceso independiente revisa pendientes cada minuto. La cola se registra junto
+con el movimiento en su transacción; no se envía a proveedores desde el formulario.
+Un bloqueo PostgreSQL serializa despachadores; claves únicas impiden duplicados
+por evento/dispositivo y resumen/fecha. Los reintentos esperan 2, 4, 8 minutos,
+hasta una hora; los movimientos vencen a las 24 horas y los resúmenes al mediodía.
+Los endpoints vencidos (404/410) se desactivan. Antes de enviar, revisa saldo,
+preferencias y usuario activo. El envío usa el mismo tag al reintentar: una caída
+después de que el proveedor acepte el aviso puede repetir la entrega, por lo que
+no se promete entrega exactamente una vez. El healthcheck exige un ciclo exitoso
+en los últimos cuatro minutos; los logs contienen sólo estado y cantidades.
+
+`GET /api/push` consulta configuración y estado del dispositivo. `POST` registra
+su suscripción o solicita una prueba; `PATCH` cambia preferencias y `DELETE`
+desactiva. Requieren sesión y las mutaciones verifican Origin y titularidad;
+las pruebas se limitan a una por minuto por usuario. Sólo se aceptan endpoints
+HTTPS de Apple, Google y Mozilla, no destinos arbitrarios. Suscripciones y claves
+nunca se imprimen. `GET /api/auth/get-session` renueva sesiones ordinarias;
+las sesiones temporales de operador mantienen su vencimiento corto.
+
+La publicación requiere autorización separada y un backup verificado. En el VPS,
+el despliegue aprobado genera las claves nuevas en `vapid.env` privado, junto a
+la configuración instalada. El wrapper carga ese archivo sin imprimirlo; si ya
+existe, valida y conserva sus claves. También conserva una configuración VAPID
+completa existente en `prod.env`; una configuración incompleta detiene el corte.
+No copia claves de desarrollo ni cambia credenciales actuales. Better Auth
+reutiliza `AUTH_SECRET`/`HOUSE_OPS_SECRET_KEY` y `AUTH_URL`; no exige rotarlas.
+Si faltan las claves push, Casa funciona y explica que los avisos no están
+configurados. El despliegue detiene el despachador antes del backup y arranca web
+y despachador con la misma imagen tras migrar. El rollback recupera Compose e
+imagen anteriores sin borrar tablas nuevas ni PDFs; puede requerir nuevo ingreso.
+Después de publicar, verificar en ambos teléfonos instalación, reapertura sin
+contraseña, aviso de prueba con Casa cerrada y apertura del mes. Las pruebas
+automáticas usan datos sintéticos y transporte simulado: no prueban la entrega
+real de Apple/Google.
 
 ## Cómo se reparten los gastos
 
@@ -100,6 +189,11 @@ docker compose --env-file .env.example config --quiet
 docker compose --env-file .env.production.example -f compose.production.yaml config --quiet
 git diff --check
 ```
+
+Para verificar la imagen con una base sintética y sin servicios externos:
+`docker build -t house-ops-pwa-local:review .` y luego `npm run test:container`.
+La prueba crea y elimina únicamente su base temporal y su contenedor de smoke;
+comprueba assets, ingreso, renovación de cookie y arranque del despachador.
 
 Las pruebas de integración y navegador crean bases PostgreSQL locales exclusivas
 y las eliminan al terminar. No leen datos del hogar ni producción. El navegador

@@ -30,10 +30,10 @@ export default async function MonthPage({
 }: {
   searchParams: Promise<{ month?: string; saved?: string }>;
 }) {
-  const user = await requireUser();
   const params = await searchParams;
   const parsed = monthSchema.safeParse(params.month);
   const month = parsed.success ? parsed.data : today().slice(0, 7);
+  const user = await requireUser(parsed.success ? month : undefined);
   const { bills, previousBills, rent, summary: s } = await getMonth(month);
   const paidRent =
     rent?.payments

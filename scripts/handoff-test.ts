@@ -157,16 +157,13 @@ async function main() {
       ]).toString("utf8"),
     );
     assert.equal(session.origin, "https://casa.bordarteuniformes.com.ar");
-    assert.equal(session.cookie, "__Secure-authjs.session-token");
+    assert.equal(session.cookie, "__Secure-better-auth.session_token");
     assert.ok(session.expiresAt <= Date.now() + 900000);
-    const { decode } = await import("@auth/core/jwt");
-    const claims = await decode({
-      token: session.token,
-      secret: "synthetic-secret-at-least-32-characters",
-      salt: session.cookie,
-    });
-    assert.equal(claims?.sub, user.id);
-    assert.equal(claims?.username, "emiliano");
+    const token = decodeURIComponent(session.token).split(".")[0];
+    const stored = await db.authSession.findUniqueOrThrow({ where: { token } });
+    assert.equal(stored.userId, user.id);
+    assert.ok(stored.id.startsWith("maintenance-"));
+    assert.ok(stored.expiresAt.getTime() <= Date.now() + 900000);
     const bills = await db.expense.findMany({ include: { payments: true } });
     const result = calculateMonth(bills, [], null, []);
     assert.equal(result.total, 23000n);

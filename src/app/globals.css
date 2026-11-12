@@ -1194,7 +1194,7 @@ td.money {
   }
   .sidebar nav {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 4px;
     margin-top: 18px;
   }
@@ -1392,5 +1392,79 @@ td.money {
   .notice {
     font-size: 11px;
     line-height: 1.6;
+  }
+}
+.install-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.install-card {
+  padding: 28px;
+  margin-bottom: 24px;
+}
+.install-card h2 {
+  margin: 10px 0 16px;
+  font-size: 24px;
+}
+.install-card p,
+.install-card li {
+  line-height: 1.75;
+  margin: 12px 0;
+}
+.install-card ol {
+  padding-left: 24px;
+  list-style: decimal;
+}
+.install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+.notification-choice {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+  cursor: pointer;
+  margin: 0;
+  line-height: 1.5;
+}
+.notification-choice input {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  accent-color: var(--primary);
+  flex-shrink: 0;
+}
+.install-actions .button:not(.primary),
+.install-card form .button {
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.sidebar {
+  padding-top: max(18px, env(safe-area-inset-top));
+}
+footer {
+  padding-bottom: max(22px, env(safe-area-inset-bottom));
+}
+@media (max-width: 800px) {
+  .install-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .install-card {
+    padding: 22px;
+  }
+  .install-actions .button {
+    width: 100%;
   }
 }

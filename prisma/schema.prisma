@@ -12,6 +12,10 @@ model User {
   passwordHash String
   active Boolean @default(true)
   createdAt DateTime @default(now())
+  pushTestAt DateTime?
+  authIdentity AuthUser?
+  pushSubscriptions PushSubscription[]
+  notifications NotificationEvent[]
   @@map("shared_users")
 }
 model Document {
@@ -100,4 +104,103 @@ model LoginAttempt {
   count Int @default(0)
   windowStart DateTime @default(now())
   @@map("shared_login_attempts")
+}
+model AuthUser {
+  id String @id
+  householdUser User @relation(fields: [id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  name String
+  email String @unique
+  emailVerified Boolean @default(false)
+  image String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sessions AuthSession[]
+  accounts AuthAccount[]
+  @@map("shared_auth_users")
+}
+model AuthSession {
+  id String @id
+  expiresAt DateTime
+  token String @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId String
+  user AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  @@index([userId])
+  @@map("shared_auth_sessions")
+}
+model AuthAccount {
+  id String @id
+  accountId String
+  providerId String
+  userId String
+  user AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  accessToken String?
+  refreshToken String?
+  idToken String?
+  accessTokenExpiresAt DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope String?
+  password String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("shared_auth_accounts")
+}
+model AuthVerification {
+  id String @id
+  identifier String
+  value String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([identifier])
+  @@map("shared_auth_verifications")
+}
+model PushSubscription {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  endpoint String @unique
+  p256dh String
+  auth String
+  enabled Boolean @default(true)
+  reminders Boolean @default(true)
+  movements Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deliveries NotificationDelivery[]
+  @@index([userId, enabled])
+  @@map("shared_push_subscriptions")
+}
+model NotificationEvent {
+  id String @id @default(cuid())
+  key String @unique
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  kind String
+  month String
+  title String
+  body String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  deliveries NotificationDelivery[]
+  @@map("shared_notification_events")
+}
+model NotificationDelivery {
+  id String @id @default(cuid())
+  eventId String
+  event NotificationEvent @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subscriptionId String
+  subscription PushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  status String @default("pending")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  deliveredAt DateTime?
+  @@unique([eventId, subscriptionId])
+  @@index([status, nextAttemptAt])
+  @@map("shared_notification_deliveries")
 }

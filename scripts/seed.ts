@@ -6,6 +6,7 @@ config({
 });
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/password";
+import { provisionAuthUsers } from "../src/lib/auth-provision";
 import { mkdirSync, writeFileSync } from "node:fs";
 const db = new PrismaClient();
 async function main() {
@@ -37,6 +38,7 @@ async function main() {
       { mode: 0o600 },
     );
   }
+  await provisionAuthUsers(db);
   console.log("Household users ready (existing passwords preserved).");
 }
 main().finally(() => db.$disconnect());

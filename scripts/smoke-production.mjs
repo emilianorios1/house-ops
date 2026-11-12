@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { PrismaClient } from "@prisma/client";
-import { encode } from "@auth/core/jwt";
+import { createMaintenanceSession } from "./maintenance-auth.mjs";
 import { createHash } from "node:crypto";
 const base = "https://casa.bordarteuniformes.com.ar";
 const db = new PrismaClient();
 const cookies = new Map();
 let phase = "public-health";
 let lastStatus;
+let maintenanceId;
 async function request(path, options = {}) {
   const response = await fetch(base + path, {
     ...options,
@@ -37,43 +38,32 @@ try {
   assert.ok(user.active);
   if (process.argv.includes("--maintenance-session")) {
     // Short-lived server-side verification only; the token never leaves this process.
-    const cookie = "__Secure-authjs.session-token";
-    cookies.set(
-      cookie,
-      await encode({
-        token: { sub: user.id, username: user.username, name: user.name },
-        secret: process.env.AUTH_SECRET,
-        salt: cookie,
-        maxAge: 120,
-      }),
-    );
+    const maintenance = await createMaintenanceSession(db, user, 120);
+    maintenanceId = maintenance.id;
+    cookies.set(maintenance.cookie, maintenance.token);
   } else {
-    phase = "login-csrf";
+    phase = "password-login";
     assert.ok(
       process.env.HOUSE_OPS_ADMIN_PASSWORD,
       "Configured production login required",
     );
-    const csrf = await request("/api/auth/csrf");
-    const { csrfToken } = await csrf.json();
-    phase = "password-login";
-    const response = await request("/api/auth/callback/credentials", {
+    const response = await request("/api/auth/sign-in/email", {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/json",
         origin: base,
       },
-      body: new URLSearchParams({
-        username: "emiliano",
+      body: JSON.stringify({
+        email: "emiliano@casa.invalid",
         password: process.env.HOUSE_OPS_ADMIN_PASSWORD,
-        csrfToken,
-        callbackUrl: base,
+        rememberMe: true,
       }),
     });
     assert.ok([200, 302, 303].includes(response.status));
   }
   phase = "authenticated-session";
-  const session = await request("/api/auth/session");
-  assert.equal((await session.json()).user?.email, "emiliano");
+  const session = await request("/api/auth/get-session");
+  assert.equal((await session.json()).user?.email, "emiliano@casa.invalid");
   const months = await db.rent.findMany({ select: { month: true } });
   phase = "monthly-page";
   for (const { month } of months) {
@@ -99,8 +89,16 @@ try {
     `PASS: canonical HTTPS domain, private access boundary, ${process.argv.includes("--maintenance-session") ? "authenticated maintenance session" : "existing password login"}, ${months.length} rent months and ${documents.length} original PDFs.`,
   );
 } catch {
-  console.error(JSON.stringify({error: "Production smoke failed", phase, status:lastStatus}));
+  console.error(
+    JSON.stringify({
+      error: "Production smoke failed",
+      phase,
+      status: lastStatus,
+    }),
+  );
   process.exitCode = 1;
 } finally {
+  if (maintenanceId)
+    await db.authSession.deleteMany({ where: { id: maintenanceId } });
   await db.$disconnect();
 }
