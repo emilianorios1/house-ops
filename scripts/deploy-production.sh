@@ -35,11 +35,14 @@ if ! docker inspect --format '{{json .NetworkSettings.Networks}}' "$web_containe
 fi
 cp "$deployment_env" "${config_dir}/deployment.previous.env"
 cp "${config_dir}/compose.production.yaml" "${config_dir}/compose.production.previous.yaml"
+cp "$compose_command" "${config_dir}/production-compose.previous.sh"
+docker pull "$image"
 rollback() {
     status=$?
     trap - ERR EXIT
     cp "${config_dir}/deployment.previous.env" "$deployment_env"
     cp "${config_dir}/compose.production.previous.yaml" "${config_dir}/compose.production.yaml"
+    cp "${config_dir}/production-compose.previous.sh" "$compose_command"
     "$compose_command" up -d --wait --wait-timeout 180 --remove-orphans || true
     echo "Cutover failed; old services restored. Original schemas and PDFs were preserved." >&2
     exit "$status"
@@ -48,6 +51,7 @@ trap rollback ERR EXIT
 # Stop writers while copying the frozen financial snapshot. Rollback restarts them.
 running_services="$("$compose_command" ps --status running --services)"
 if grep -qx sync-runner <<< "$running_services"; then "$compose_command" stop sync-runner; fi
+if grep -qx notifications <<< "$running_services"; then "$compose_command" stop notifications; fi
 "$compose_command" stop web
 # Back up the frozen database and original external documents before migration.
 database_backup="$(HOUSE_OPS_SKIP_BACKUP_PRUNE=1 "$repo_root/scripts/backup-production.sh")"
@@ -60,14 +64,24 @@ tar --compare --gzip --file "$document_backup" --directory "$data_dir"
 sha256sum "$document_backup" > "${document_backup}.sha256"
 sha256sum --check --status "${document_backup}.sha256"
 echo "Frozen database restore and external document backup verified."
+vapid_count="$(awk '/^VAPID_(PUBLIC_KEY|PRIVATE_KEY|SUBJECT)=.+/{count++} END{print count+0}' "$prod_env")"
+if [[ -f "${config_dir}/vapid.env" || "$vapid_count" == 0 ]]; then
+    docker run --rm --network none --user 0:0 \
+        --mount "type=bind,source=${config_dir},target=/config" \
+        --entrypoint node "$image" scripts/provision-push.mjs /config/vapid.env
+elif [[ "$vapid_count" != 3 ]]; then
+    echo "Incomplete existing push configuration; no credentials were replaced." >&2
+    exit 1
+fi
+install -m 0755 "$repo_root/scripts/production-compose.sh" "$compose_command"
 install -m 0644 "$repo_root/compose.production.yaml" "${config_dir}/compose.production.yaml"
 umask 077
 printf 'HOME_LAB_IMAGE=%s\nHOUSE_OPS_LEGACY_DOCUMENT_ROOT=%s\n' "$image" "$legacy_document_root" > "$deployment_env"
 "$compose_command" config --quiet
-"$compose_command" pull web migrate
+"$compose_command" pull web migrate notifications
 "$compose_command" up -d --wait --wait-timeout 120 postgres
 "$compose_command" run --rm migrate
-"$compose_command" up -d --wait --wait-timeout 180 --remove-orphans web
+"$compose_command" up -d --wait --wait-timeout 180 --remove-orphans web notifications
 curl --fail --silent --show-error --location https://casa.bordarteuniformes.com.ar/health/ >/dev/null
 running_image="$(docker inspect --format '{{.Config.Image}}' "$("$compose_command" ps -q web)")"
 if [[ "$running_image" != "$image" ]]; then echo "Image mismatch" >&2; exit 1; fi
@@ -90,7 +104,7 @@ if [[ "$configured_login_matches" == 0 ]]; then
 elif [[ "$configured_login_matches" != 1 ]]; then
     echo "Password compatibility check failed" >&2; exit 1
 fi
-docker exec -i -e HOUSE_OPS_ADMIN_PASSWORD="$admin_password" "$web_container" node --input-type=module - "${smoke_options[@]}" < "$repo_root/scripts/smoke-production.mjs"
+docker exec -i -e HOUSE_OPS_ADMIN_PASSWORD="$admin_password" "$web_container" node scripts/smoke-production.mjs "${smoke_options[@]}"
 trap - ERR EXIT
 # Keep previous config for operator rollback. Never restore/drop a database automatically.
 echo "Next.js deployed on the existing VPS and database. Previous config retained for rollback."

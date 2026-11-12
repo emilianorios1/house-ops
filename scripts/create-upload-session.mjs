@@ -1,4 +1,4 @@
-import { encode } from "@auth/core/jwt";
+import { createMaintenanceSession } from "./maintenance-auth.mjs";
 import { PrismaClient } from "@prisma/client";
 import {
   randomBytes,
@@ -8,19 +8,20 @@ import {
 } from "node:crypto";
 const db = new PrismaClient();
 try {
-  if (!process.env.UPLOAD_PUBLIC_KEY || !process.env.AUTH_SECRET)
+  if (
+    !process.env.UPLOAD_PUBLIC_KEY ||
+    !(
+      process.env.BETTER_AUTH_SECRET ??
+      process.env.AUTH_SECRET ??
+      process.env.HOUSE_OPS_SECRET_KEY
+    )
+  )
     throw Error("Upload session configuration required");
   const user = await db.user.findUniqueOrThrow({
     where: { username: "emiliano" },
   });
   if (!user.active) throw Error("Active household user required");
-  const cookie = "__Secure-authjs.session-token";
-  const token = await encode({
-    token: { sub: user.id, username: user.username, name: user.name },
-    secret: process.env.AUTH_SECRET,
-    salt: cookie,
-    maxAge: 900,
-  });
+  const { cookie, token } = await createMaintenanceSession(db, user, 900);
   const key = randomBytes(32),
     iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);

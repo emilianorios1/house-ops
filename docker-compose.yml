@@ -23,10 +23,25 @@ services:
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       DOCUMENT_STORE_PATH: /data/shared-documents
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     ports:
       - "127.0.0.1:${HOUSE_OPS_DEV_WEB_PORT:-3000}:8000"
     volumes:
       - ./data/shared-documents:/data/shared-documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+  notifications:
+    profiles: ["app"]
+    build: .
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+    command: ["npm", "run", "notifications:work"]
     depends_on:
       postgres:
         condition: service_healthy

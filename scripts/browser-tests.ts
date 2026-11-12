@@ -6,6 +6,7 @@ config({
 });
 import { PrismaClient } from "@prisma/client";
 import { spawn, spawnSync } from "node:child_process";
+import { generateVAPIDKeys } from "web-push";
 const rootUrl = new URL(process.env.DATABASE_URL!);
 if (!["localhost", "127.0.0.1"].includes(rootUrl.hostname))
   throw new Error("Browser fixtures must use an isolated local database.");
@@ -14,12 +15,17 @@ const name = `house_ops_e2e_${Date.now()}`;
 const url = new URL(rootUrl);
 url.pathname = `/${name}`;
 const port = process.env.E2E_TEST_PORT ?? "3100";
+const pushKeys = generateVAPIDKeys();
 const env = {
   ...process.env,
   HOUSE_OPS_DATABASE_OVERRIDE: "1",
   HOUSE_OPS_TEST_BUILD_DIR: ".private/next-e2e",
   DATABASE_URL: url.href,
   AUTH_URL: `http://localhost:${port}`,
+  BETTER_AUTH_URL: `http://localhost:${port}`,
+  VAPID_PUBLIC_KEY: pushKeys.publicKey,
+  VAPID_PRIVATE_KEY: pushKeys.privateKey,
+  VAPID_SUBJECT: "https://example.test",
   E2E_BASE_URL: `http://localhost:${port}`,
   NEXT_TELEMETRY_DISABLED: "1",
 };
@@ -33,11 +39,13 @@ async function main() {
   try {
     run(["--import", "tsx", "scripts/migrate.ts"]);
     run(["--import", "tsx", "scripts/seed.ts"]);
+    // Exercise the installed PWA against production assets, without dev HMR reloads.
+    run(["node_modules/next/dist/bin/next", "build"]);
     server = spawn(
       process.execPath,
       [
         "node_modules/next/dist/bin/next",
-        "dev",
+        "start",
         "--hostname",
         "127.0.0.1",
         "--port",
@@ -64,7 +72,7 @@ async function main() {
     );
     process.exitCode = result.status ?? 1;
   } finally {
-    if (server) {
+    if (server && server.exitCode === null) {
       const exited = new Promise<void>((r) => server!.once("exit", () => r()));
       server.kill();
       await exited;

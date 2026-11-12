@@ -11,6 +11,8 @@ COPY src/app ./src/app
 COPY src/auth.ts ./src/auth.ts
 COPY src/components ./src/components
 COPY src/lib ./src/lib
+COPY public ./public
+COPY scripts/notification-worker.ts scripts/maintenance-auth.mjs scripts/provision-push.mjs ./scripts/
 COPY scripts/migrate.ts scripts/seed.ts scripts/import-legacy.ts scripts/import-pdf.ts scripts/import-records.ts scripts/import-handoff.ts scripts/smoke-production.mjs scripts/create-upload-session.mjs ./scripts/
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
@@ -22,6 +24,7 @@ WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=8000 HOSTNAME=0.0.0.0
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
 # The same immutable image also runs forward-only migrations and one-time import.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/prisma ./prisma

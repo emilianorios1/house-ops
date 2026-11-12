@@ -42,10 +42,11 @@ function Feedback({
     </>
   );
 }
-export function LoginForm() {
+export function LoginForm({ month }: { month?: string }) {
   const [state, action, pending] = useActionState(login, {});
   return (
     <form action={action}>
+      {month && <input type="hidden" name="month" value={month} />}
       <label>
         Quién sos
         <select name="username">

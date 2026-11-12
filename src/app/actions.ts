@@ -3,8 +3,9 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { AuthError } from "next-auth";
-import { signIn, signOut } from "@/auth";
+import { auth } from "@/auth";
+import { cookies, headers } from "next/headers";
+import { enqueueMovement } from "@/lib/notifications";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
 import {
@@ -106,23 +107,35 @@ async function checkAffectedRents(
 }
 export async function login(_: FormState, form: FormData): Promise<FormState> {
   try {
-    await signIn("credentials", {
-      username: form.get("username"),
-      password: form.get("password"),
-      redirectTo: "/",
+    const username = z
+      .enum(["emiliano", "vitoria"])
+      .parse(form.get("username"));
+    const password = z.string().min(1).max(256).parse(form.get("password"));
+    await auth.api.signInEmail({
+      headers: await headers(),
+      body: { email: `${username}@casa.invalid`, password, rememberMe: true },
     });
-    return {};
-  } catch (e) {
-    if (e instanceof AuthError)
-      return {
-        error:
-          "Revisá tu usuario y contraseña. Si probaste varias veces, esperá 15 minutos.",
-      };
-    throw e;
+  } catch {
+    return {
+      error:
+        "Revisá tu usuario y contraseña. Si probaste varias veces, esperá 15 minutos.",
+    };
   }
+  const month = monthSchema.safeParse(form.get("month"));
+  redirect(month.success ? `/?month=${month.data}` : "/");
 }
 export async function logout() {
-  await signOut({ redirectTo: "/login" });
+  const user = await requireUser();
+  const jar = await cookies();
+  const deviceId = jar.get("casa-push-device")?.value;
+  if (deviceId)
+    await db.pushSubscription.updateMany({
+      where: { id: deviceId, userId: user.id },
+      data: { enabled: false },
+    });
+  jar.delete("casa-push-device");
+  await auth.api.signOut({ headers: await headers() });
+  redirect("/login");
 }
 export async function saveExpense(
   _: FormState,
@@ -387,6 +400,20 @@ export async function savePayment(
           null,
           payment,
         );
+        const bill = data.expenseId
+          ? await tx.expense.findUniqueOrThrow({
+              where: { id: data.expenseId },
+            })
+          : null;
+        await enqueueMovement(tx, {
+          actor: user.username,
+          entityId: payment.id,
+          kind: "payment",
+          month,
+          amount: data.amount,
+          payer: data.payer,
+          concept: bill?.title ?? `Alquiler ${month}`,
+        });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -432,6 +459,15 @@ export async function saveSettlement(
         null,
         row,
       );
+      await enqueueMovement(tx, {
+        actor: user.username,
+        entityId: row.id,
+        kind: "settlement",
+        month,
+        amount: data.amount,
+        payer: data.from,
+        concept: `Reintegro ${month}`,
+      });
     });
   } catch (e) {
     return errorState(e);

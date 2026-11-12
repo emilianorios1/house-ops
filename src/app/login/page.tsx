@@ -1,7 +1,13 @@
 import { LoginForm } from "@/components/forms";
 import { Home } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-export default function LoginPage() {
+import { monthSchema } from "@/lib/money";
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
+  const parsed = monthSchema.safeParse((await searchParams).month);
   return (
     <main className="login-page">
       <div className="login-theme">
@@ -32,7 +38,7 @@ export default function LoginPage() {
         <span className="eyebrow">BIENVENIDOS A CASA</span>
         <h2>Entrá a tu espacio</h2>
         <p>Un lugar simple para nuestras cuentas.</p>
-        <LoginForm />
+        <LoginForm month={parsed.success ? parsed.data : undefined} />
       </section>
     </main>
   );

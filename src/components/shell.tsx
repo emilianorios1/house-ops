@@ -8,9 +8,11 @@ import {
   Clock3,
   LogOut,
   Heart,
+  Bell,
 } from "lucide-react";
 import { logout } from "@/app/actions";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AppRuntime } from "@/components/app-runtime";
 export function Shell({
   name,
   active = "month",
@@ -30,9 +32,16 @@ export function Shell({
       key: "documents",
     },
     { href: "/audit", label: "Actividad", icon: Clock3, key: "audit" },
+    {
+      href: "/install",
+      label: "Instalar y avisos",
+      icon: Bell,
+      key: "install",
+    },
   ];
   return (
     <div className="app-shell">
+      <AppRuntime />
       <aside className="sidebar">
         <Link href="/" className="brand">
           <span className="brand-icon">
