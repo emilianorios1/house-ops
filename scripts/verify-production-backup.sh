@@ -54,9 +54,10 @@ docker run --detach --rm \
     postgres:17-alpine >/dev/null
 
 ready=false
+# The initialization server accepts sockets only, then stops. Wait for final TCP.
 for _ in {1..30}; do
     if docker exec "$container_name" \
-        pg_isready --username postgres --dbname postgres >/dev/null 2>&1; then
+        pg_isready --host 127.0.0.1 --username postgres --dbname postgres >/dev/null 2>&1; then
         ready=true
         break
     fi
@@ -68,9 +69,10 @@ if [[ "$ready" != true ]]; then
 fi
 
 docker exec "$container_name" \
-    createdb --username postgres home_lab_restore_check
+    createdb --host 127.0.0.1 --username postgres home_lab_restore_check
 docker exec -i "$container_name" \
     pg_restore \
+        --host 127.0.0.1 \
         --username postgres \
         --dbname home_lab_restore_check \
         --no-owner \
@@ -81,6 +83,7 @@ docker exec -i "$container_name" \
 has_bronze="$(
     docker exec "$container_name" \
         psql \
+            --host 127.0.0.1 \
             --username postgres \
             --dbname home_lab_restore_check \
             --tuples-only \
