@@ -194,6 +194,9 @@ Para verificar la imagen con una base sintética y sin servicios externos:
 `docker build -t house-ops-pwa-local:review .` y luego `npm run test:container`.
 La prueba crea y elimina únicamente su base temporal y su contenedor de smoke;
 comprueba assets, ingreso, renovación de cookie y arranque del despachador.
+`bash scripts/test-backup-restore.sh` verifica también la restauración de un dump
+sintético en PostgreSQL aislado. Espera el servidor TCP definitivo, evitando
+confundirlo con el servidor temporal de inicialización que usa sólo socket.
 
 Las pruebas de integración y navegador crean bases PostgreSQL locales exclusivas
 y las eliminan al terminar. No leen datos del hogar ni producción. El navegador
