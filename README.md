@@ -28,8 +28,35 @@ Auth.js requiere un nuevo ingreso y conserva los usuarios y hashes existentes,
 incluidos Django. Las identidades técnicas `@casa.invalid` son internas; no se
 envían correos. Las tablas de autenticación son `shared_auth_*`; los hashes
 anteriores permanecen disponibles para rollback. `db:seed` agrega identidades
-faltantes sin restablecer contraseñas. No editar hashes manualmente: cualquier
-futuro cambio de contraseña debe contemplar ambos registros y el rollback.
+faltantes sin restablecer contraseñas. No editar hashes manualmente.
+
+### Restablecer una contraseña en producción
+
+Desde una terminal interactiva en el VPS `bordarte`, en un checkout que incluya
+esta herramienta, ejecutar:
+
+```sh
+bash scripts/change-production-password.sh vitoria
+```
+
+También admite `emiliano`. Identifica la instalación existente y muestra su
+imagen activa; pide la nueva contraseña dos veces sin mostrarla (9 a 128
+caracteres). No requiere conocer la anterior. La contraseña viaja sólo por
+entrada estándar: no pasarla como argumento ni guardarla en archivos o variables
+de entorno. No ejecutar con herramientas de grabación de terminal.
+
+El comando actualiza juntos los dos registros de acceso, cierra las sesiones del
+usuario, limpia el bloqueo por intentos fallidos y registra una auditoría sin
+contraseñas ni hashes. Si los registros no coinciden, el usuario está inactivo o
+hay un fallo concurrente, cancela toda la operación. No modifica las tablas
+históricas Django: un rollback a ese runtime conserva su contraseña anterior.
+Vitoria deberá volver a ingresar en sus dispositivos con la nueva contraseña.
+
+No requiere desplegar una imagen nueva: envía únicamente el código de la
+herramienta al contenedor activo y usa su conexión existente. Requiere permisos
+para operar Docker y la configuración instalada; no ejecutar desde la laptop ni
+mediante el runner de despliegue. Cambiar `HOUSE_OPS_SECOND_PASSWORD` no
+restablece la contraseña de un usuario existente.
 
 ### Activar avisos
 

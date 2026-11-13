@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { syntheticPdf } from "../tests-next/helpers";
 import { verifyPassword } from "../src/lib/password";
 import { verifyNotifications } from "./notification-fixtures";
+import { verifyPasswordReset } from "./password-fixtures";
 const rootUrl = new URL(process.env.DATABASE_URL!);
 if (!["localhost", "127.0.0.1"].includes(rootUrl.hostname))
   throw new Error("Migration tests only support local PostgreSQL.");
@@ -131,6 +132,7 @@ async function main() {
       }),
     );
     await verifyNotifications(db);
+    await verifyPasswordReset(db, env);
     console.log(
       "PASS: existing database baseline, legacy import, original tables, credentials, PDF hash, idempotence, unassigned payments, money constraints, immutable audit.",
     );
